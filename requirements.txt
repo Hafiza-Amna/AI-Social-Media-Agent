@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+python-dotenv
+pydantic
+pydantic-settings
+sqlalchemy
+litellm<1.80.0
