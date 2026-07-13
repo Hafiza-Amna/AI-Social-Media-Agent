@@ -142,7 +142,7 @@ async def chat(request: ChatRequest, fastapi_request: Request):
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/linkedin/login", tags=["LinkedIn OAuth"])
-def linkedin_login():
+def linkedin_login(request: Request):
     """
     Redirects the user to LinkedIn's OAuth authorization page.
     """
@@ -158,7 +158,9 @@ def linkedin_login():
 
     # In a real production app, use a dynamically generated random state.
     state = "linkedin_agent_oauth_state"
-    redirect_uri = "http://localhost:8000/linkedin/callback"
+    # Construct redirect URI dynamically from request base URL
+    base_url = str(request.base_url).rstrip("/")
+    redirect_uri = f"{base_url}/linkedin/callback"
     scopes = "openid profile email w_member_social"
 
     auth_url = (
@@ -174,7 +176,7 @@ def linkedin_login():
 
 
 @app.get("/linkedin/callback", tags=["LinkedIn OAuth"])
-def linkedin_callback(code: str = None, state: str = None, error: str = None, error_description: str = None):
+def linkedin_callback(request: Request, code: str = None, state: str = None, error: str = None, error_description: str = None):
     """
     Processes the OAuth callback, exchanges authorization code for access token,
     and updates config & .env file.
@@ -193,7 +195,10 @@ def linkedin_callback(code: str = None, state: str = None, error: str = None, er
 
     client_id = settings.LINKEDIN_CLIENT_ID
     client_secret = settings.LINKEDIN_CLIENT_SECRET
-    redirect_uri = "http://localhost:8000/linkedin/callback"
+    
+    # Construct redirect URI dynamically from request base URL
+    base_url = str(request.base_url).rstrip("/")
+    redirect_uri = f"{base_url}/linkedin/callback"
 
     if not client_id or not client_secret:
         raise HTTPException(
