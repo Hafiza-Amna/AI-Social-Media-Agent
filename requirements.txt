@@ -5,3 +5,5 @@ pydantic
 pydantic-settings
 sqlalchemy
 litellm<1.80.0
+requests
+

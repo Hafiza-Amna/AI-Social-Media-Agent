@@ -45,19 +45,54 @@ class AutoPublishService:
         if scheduled_dt < datetime.utcnow():
             logger.warning("Scheduled time is in the past. Executing immediately as a catch-up post.")
 
-        # 2. Simulation Phase
+        # 2. Execution Phase
+        platform_lower = request.platform.lower().strip()
+        
+        if platform_lower == "linkedin":
+            from config import settings
+            if not settings.LINKEDIN_ACCESS_TOKEN:
+                logger.error("LinkedIn access token is missing in configuration.")
+                return PublishResponse(
+                    publishing_status="Failed",
+                    platform=request.platform,
+                    scheduled_time=scheduled_dt,
+                    message="Configuration Error: LINKEDIN_ACCESS_TOKEN is missing or empty in your environment/settings.",
+                    publication_id=None
+                )
+            
+            try:
+                logger.info("Executing real publishing to LinkedIn API...")
+                from services.linkedin_service import LinkedInService
+                linkedin_service = LinkedInService()
+                publication_id = linkedin_service.publish_text_post(request.content)
+                
+                return PublishResponse(
+                    publishing_status="Success",
+                    platform=request.platform,
+                    scheduled_time=scheduled_dt,
+                    message="Successfully published post to LinkedIn.",
+                    publication_id=publication_id
+                )
+            except Exception as e:
+                logger.error(f"Failed to publish to LinkedIn: {e}", exc_info=True)
+                return PublishResponse(
+                    publishing_status="Failed",
+                    platform=request.platform,
+                    scheduled_time=scheduled_dt,
+                    message=f"LinkedIn Publishing Error: {str(e)}",
+                    publication_id=None
+                )
+        
+        # Fallback simulation for other platforms (e.g. Instagram, Facebook, X)
         logger.info(f"Simulating publishing to {request.platform}...")
         logger.debug(f"Content: {request.content}")
         if request.media_urls:
             logger.debug(f"Media attached: {len(request.media_urls)} items.")
 
-        # TODO: Integrate actual platform APIs (Facebook, Instagram, LinkedIn, X) here
-
         # Generate a simulated publication ID
         platform_slug = request.platform.lower().replace(" ", "_").replace("(", "").replace(")", "")
         simulated_pub_id = f"{platform_slug}_post_{uuid.uuid4().hex[:8]}"
 
-        # 3. Return Success Response
         return PublishResponse(
             publishing_status="Success (Simulated)",
             platform=request.platform,
@@ -65,3 +100,4 @@ class AutoPublishService:
             message=f"Successfully simulated publishing to {request.platform}.",
             publication_id=simulated_pub_id
         )
+
