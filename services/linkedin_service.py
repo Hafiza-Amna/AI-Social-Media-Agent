@@ -32,23 +32,42 @@ class LinkedInService:
             "Connection": "Keep-Alive",
         }
         
-        # We call the /v2/me endpoint to get the member profile id
+        person_id = None
+        
+        # We call the /v2/me endpoint first
         url = f"{self.base_url}/v2/me"
         logger.info("Fetching LinkedIn profile data from /v2/me...")
-        response = requests.get(url, headers=headers)
-        
-        if response.status_code != 200:
-            logger.error(f"Failed to fetch LinkedIn profile: {response.status_code} - {response.text}")
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                person_id = data.get("id")
+            else:
+                logger.warning(f"Profile API /v2/me returned status {response.status_code}: {response.text}")
+        except Exception as e:
+            logger.warning(f"Failed to connect to /v2/me: {e}")
+
+        # Fallback to /v2/userinfo (Sign In with LinkedIn OIDC endpoint)
+        if not person_id:
+            logger.info("Trying OIDC /v2/userinfo endpoint...")
+            url_userinfo = f"{self.base_url}/v2/userinfo"
+            try:
+                response_userinfo = requests.get(url_userinfo, headers=headers)
+                if response_userinfo.status_code == 200:
+                    data_ui = response_userinfo.json()
+                    person_id = data_ui.get("sub")
+                else:
+                    logger.error(f"Userinfo API returned status {response_userinfo.status_code}: {response_userinfo.text}")
+            except Exception as e:
+                logger.error(f"Failed to connect to /v2/userinfo: {e}")
+
+        if not person_id:
             raise RuntimeError(
-                f"LinkedIn Profile API Error ({response.status_code}): {response.text}"
+                "Could not retrieve LinkedIn member ID from either /v2/me or /v2/userinfo. Please check your credentials/scopes."
             )
             
-        data = response.json()
-        person_id = data.get("id")
-        if not person_id:
-            raise ValueError("Could not find 'id' field in LinkedIn profile response.")
-            
         return f"urn:li:person:{person_id}"
+
 
     def publish_text_post(self, content: str) -> str:
         """
@@ -138,4 +157,27 @@ class LinkedInService:
             logger.info("Successfully updated LINKEDIN_ACCESS_TOKEN in .env file.")
         except Exception as e:
             logger.error(f"Failed to update LINKEDIN_ACCESS_TOKEN in .env: {e}")
+
+
+def publish_to_linkedin(content: str) -> dict:
+    """
+    Exposes a clean standalone function to publish content to LinkedIn using the stored token.
+    Returns a success/failure dictionary.
+    """
+    try:
+        service = LinkedInService()
+        urn = service.publish_text_post(content)
+        return {
+            "success": True,
+            "publication_id": urn,
+            "message": "Successfully published post to LinkedIn."
+        }
+    except Exception as e:
+        logger.error(f"publish_to_linkedin failed: {e}", exc_info=True)
+        return {
+            "success": False,
+            "publication_id": None,
+            "message": f"Failed to publish to LinkedIn: {str(e)}"
+        }
+
 

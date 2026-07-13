@@ -2,7 +2,7 @@
 from tools.content_generator_tool import content_generator_tool
 from tools.calendar_tool import calendar_tool
 from tools.scheduling_tool import scheduling_tool
-from tools.publishing_tool import publishing_tool
+from tools.publishing_tool import publishing_tool, linkedin_publish_tool
 from tools.comment_tool import comment_tool
 from tools.dm_tool import dm_tool
 from tools.analytics_tool import analytics_tool
@@ -49,6 +49,7 @@ def create_master_agent() -> MasterAgent:
         calendar_tool,
         scheduling_tool,
         publishing_tool,
+        linkedin_publish_tool,
         comment_tool,
         dm_tool,
         analytics_tool,

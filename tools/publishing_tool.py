@@ -46,3 +46,16 @@ def publish_post(request: PublishRequest) -> PublishResponse:
 
 
 publishing_tool = FunctionTool(func=publish_post)
+
+
+def publish_to_linkedin_tool(content: str) -> dict:
+    """
+    Publishes the generated content immediately to the user's real LinkedIn profile.
+    Provide the exact text content to publish.
+    """
+    from services.linkedin_service import publish_to_linkedin
+    return publish_to_linkedin(content)
+
+
+linkedin_publish_tool = FunctionTool(func=publish_to_linkedin_tool)
+
