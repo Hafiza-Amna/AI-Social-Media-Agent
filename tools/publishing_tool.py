@@ -48,14 +48,35 @@ def publish_post(request: PublishRequest) -> PublishResponse:
 publishing_tool = FunctionTool(func=publish_post)
 
 
-def publish_to_linkedin_tool(content: str) -> dict:
+# ---------------------------------------------------------------------------
+# LinkedIn Real Publishing Tool
+# ---------------------------------------------------------------------------
+from pydantic import BaseModel, Field
+
+
+class LinkedInPublishRequest(BaseModel):
+    content: str = Field(
+        ...,
+        description="The full text content to publish as a LinkedIn post on the authenticated user's profile.",
+    )
+
+
+def publish_to_linkedin_tool(request: LinkedInPublishRequest) -> dict:
     """
-    Publishes the generated content immediately to the user's real LinkedIn profile.
-    Provide the exact text content to publish.
+    Publishes the generated content immediately to the authenticated user's real LinkedIn profile
+    using the stored LINKEDIN_ACCESS_TOKEN. Call this tool after generating post content whenever
+    the user asks to post, publish, or share content on LinkedIn.
+    Expects a 'content' field with the exact text to publish.
+    Returns a JSON object with 'success' (bool), 'publication_id' (str), and 'message' (str).
     """
+    logger.info("[linkedin_publish_tool] Invoked — preparing to publish to LinkedIn API.")
     from services.linkedin_service import publish_to_linkedin
-    return publish_to_linkedin(content)
+    result = publish_to_linkedin(request.content)
+    if result.get("success"):
+        logger.info(f"[linkedin_publish_tool] SUCCESS — publication_id: {result.get('publication_id')}")
+    else:
+        logger.error(f"[linkedin_publish_tool] FAILED — {result.get('message')}")
+    return result
 
 
 linkedin_publish_tool = FunctionTool(func=publish_to_linkedin_tool)
-

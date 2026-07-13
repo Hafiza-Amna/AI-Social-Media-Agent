@@ -182,10 +182,18 @@ class AIIntentRouter:
 
         tool = self._tools_map[fn_name]
         try:
-            args_dict   = json.loads(fn_args)
-            request_obj = tool.request_class(**args_dict)
-            result      = tool(request_obj)
-            serialized  = (
+            args_dict = json.loads(fn_args)
+
+            if tool.request_class is not None:
+                # Tool takes a Pydantic model — construct it and call
+                request_obj = tool.request_class(**args_dict)
+                result = tool(request_obj)
+            else:
+                # Tool takes plain keyword arguments — call directly
+                logger.info(f"[Router] Tool '{fn_name}' invoked with kwargs: {list(args_dict.keys())}")
+                result = tool.func(**args_dict)
+
+            serialized = (
                 result.model_dump_json()
                 if hasattr(result, "model_dump_json")
                 else json.dumps(result)

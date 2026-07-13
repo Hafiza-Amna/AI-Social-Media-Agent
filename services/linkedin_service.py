@@ -75,7 +75,7 @@ class LinkedInService:
         Returns the publication URN (ID) on success.
         """
         author_urn = self.get_member_urn()
-        logger.info(f"Resolved LinkedIn Author URN: {author_urn}")
+        logger.info(f"[LinkedIn] Resolved Author URN: {author_urn}")
 
         headers = {
             "Authorization": f"Bearer {self.access_token}",
@@ -100,17 +100,22 @@ class LinkedInService:
             }
         }
 
-        logger.info("Sending post request to LinkedIn /v2/ugcPosts...")
+        logger.info(f"[LinkedIn] POST {url} — content length: {len(content)} chars")
         response = requests.post(url, headers=headers, json=payload)
+        logger.info(f"[LinkedIn] Response status: {response.status_code}")
 
         if response.status_code not in (200, 201):
-            logger.error(f"Failed to publish to LinkedIn: {response.status_code} - {response.text}")
+            logger.error(f"[LinkedIn] Failed to publish: {response.status_code} - {response.text}")
+            # Provide friendly error messages for common failures
+            if response.status_code == 401:
+                raise RuntimeError("LinkedIn token is invalid or expired. Please re-authenticate via /linkedin/login.")
+            elif response.status_code == 403:
+                raise RuntimeError("LinkedIn permission denied. Ensure 'w_member_social' scope is granted.")
             raise RuntimeError(
                 f"LinkedIn Publishing API Error ({response.status_code}): {response.text}"
             )
 
         data = response.json()
-        # UGC posts endpoint returns URN in the 'id' field of the response payload
         ugc_urn = data.get("id")
         if not ugc_urn:
             logger.warning("LinkedIn response did not contain an 'id' field, returning default URN.")
