@@ -138,6 +138,131 @@ async def chat(request: ChatRequest, fastapi_request: Request):
     )
 
 # ─────────────────────────────────────────────────────────────────────────────
+# LinkedIn OAuth Endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.get("/linkedin/login", tags=["LinkedIn OAuth"])
+def linkedin_login():
+    """
+    Redirects the user to LinkedIn's OAuth authorization page.
+    """
+    from fastapi.responses import RedirectResponse
+    import urllib.parse
+
+    client_id = settings.LINKEDIN_CLIENT_ID
+    if not client_id:
+        raise HTTPException(
+            status_code=400,
+            detail="LINKEDIN_CLIENT_ID is not configured in settings/environment."
+        )
+
+    # In a real production app, use a dynamically generated random state.
+    state = "linkedin_agent_oauth_state"
+    redirect_uri = "http://localhost:8000/linkedin/callback"
+    scopes = "openid profile email w_member_social"
+
+    auth_url = (
+        "https://www.linkedin.com/oauth/v2/authorization?"
+        f"response_type=code&"
+        f"client_id={client_id}&"
+        f"redirect_uri={urllib.parse.quote(redirect_uri)}&"
+        f"state={state}&"
+        f"scope={urllib.parse.quote(scopes)}"
+    )
+    
+    return RedirectResponse(auth_url)
+
+
+@app.get("/linkedin/callback", tags=["LinkedIn OAuth"])
+def linkedin_callback(code: str = None, state: str = None, error: str = None, error_description: str = None):
+    """
+    Processes the OAuth callback, exchanges authorization code for access token,
+    and updates config & .env file.
+    """
+    from fastapi.responses import HTMLResponse
+    import requests
+
+    if error:
+        return HTMLResponse(
+            content=f"<h3>Authentication Failed</h3><p>{error}: {error_description}</p>",
+            status_code=400
+        )
+
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing authorization code.")
+
+    client_id = settings.LINKEDIN_CLIENT_ID
+    client_secret = settings.LINKEDIN_CLIENT_SECRET
+    redirect_uri = "http://localhost:8000/linkedin/callback"
+
+    if not client_id or not client_secret:
+        raise HTTPException(
+            status_code=500,
+            detail="LinkedIn configuration is incomplete. Missing client_id or client_secret."
+        )
+
+    # Exchange authorization code for Access Token
+    token_url = "https://www.linkedin.com/oauth/v2/accessToken"
+    payload = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": redirect_uri,
+        "client_id": client_id,
+        "client_secret": client_secret,
+    }
+
+    try:
+        response = requests.post(token_url, data=payload)
+        if response.status_code != 200:
+            return HTMLResponse(
+                content=f"<h3>Token Exchange Failed</h3><p>Status: {response.status_code}</p><pre>{response.text}</pre>",
+                status_code=400
+            )
+
+        token_data = response.json()
+        access_token = token_data.get("access_token")
+        if not access_token:
+            return HTMLResponse(
+                content="<h3>Token Exchange Failed</h3><p>Access token was not found in response payload.</p>",
+                status_code=400
+            )
+
+        # Securely store access token
+        from services.linkedin_service import LinkedInService
+        LinkedInService.update_env_token(access_token)
+
+        success_html = """
+        <html>
+        <head>
+            <title>Authentication Successful</title>
+            <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; background-color: #f3f6f8; margin: 0; }
+                .card { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); text-align: center; max-width: 450px; }
+                h1 { color: #0a66c2; font-size: 24px; margin-bottom: 16px; }
+                p { color: #5e5e5e; font-size: 16px; line-height: 1.5; margin-bottom: 24px; }
+                .success-badge { color: #057642; background-color: #e1f4e9; font-weight: 600; padding: 6px 12px; border-radius: 4px; display: inline-block; margin-bottom: 20px; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="success-badge">✓ Authorization Successful</div>
+                <h1>LinkedIn Connected!</h1>
+                <p>The AI Social Media Agent has securely stored your Access Token and is now ready to post to your LinkedIn profile.</p>
+                <p style="font-size: 14px; color: #8c8c8c;">You can now close this tab and start publishing.</p>
+            </div>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=success_html)
+
+    except Exception as e:
+        logger.error(f"Error during token exchange callback: {e}", exc_info=True)
+        return HTMLResponse(
+            content=f"<h3>Internal Server Error</h3><p>{str(e)}</p>",
+            status_code=500
+        )
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Application Entry Point
 # ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":

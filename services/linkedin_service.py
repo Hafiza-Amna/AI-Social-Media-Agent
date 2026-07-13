@@ -98,3 +98,44 @@ class LinkedInService:
             return f"urn:li:share:unknown_{response.status_code}"
             
         return ugc_urn
+
+    @staticmethod
+    def update_env_token(token: str) -> None:
+        """
+        Updates the LINKEDIN_ACCESS_TOKEN in memory settings and in the .env file.
+        """
+        # Update setting in memory
+        settings.LINKEDIN_ACCESS_TOKEN = token
+        
+        # Write to .env file
+        import os
+        env_path = ".env"
+        if not os.path.exists(env_path):
+            logger.warning(f".env file not found at {env_path}, creating a new one.")
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.write(f'LINKEDIN_ACCESS_TOKEN="{token}"\n')
+            return
+
+        try:
+            with open(env_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            
+            updated = False
+            new_lines = []
+            for line in lines:
+                if line.strip().startswith("LINKEDIN_ACCESS_TOKEN="):
+                    new_lines.append(f'LINKEDIN_ACCESS_TOKEN="{token}"\n')
+                    updated = True
+                else:
+                    new_lines.append(line)
+            
+            if not updated:
+                new_lines.append(f'\nLINKEDIN_ACCESS_TOKEN="{token}"\n')
+                
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(new_lines)
+            
+            logger.info("Successfully updated LINKEDIN_ACCESS_TOKEN in .env file.")
+        except Exception as e:
+            logger.error(f"Failed to update LINKEDIN_ACCESS_TOKEN in .env: {e}")
+
