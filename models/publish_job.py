@@ -1,8 +1,7 @@
+import json
 from enum import Enum
-from pydantic import BaseModel, Field
-from typing import List, Optional
-from datetime import datetime
-from models.platform_type import PlatformType
+from sqlalchemy import Column, String, Integer, DateTime
+from database import Base
 
 class PublishStatus(str, Enum):
     """
@@ -14,18 +13,42 @@ class PublishStatus(str, Enum):
     FAILED = "Failed"         # Encountered an error during publishing
     CANCELLED = "Cancelled"   # Aborted by the user
 
-class PublishJob(BaseModel):
+class PublishJob(Base):
     """
-    Model representing a single job in the auto-publishing queue.
+    SQLAlchemy Model representing a single job in the auto-publishing queue.
     """
-    job_id: str = Field(..., description="Unique ID for this publishing job.")
-    platform: PlatformType = Field(..., description="The platform to publish to.")
-    account_id: str = Field(..., description="The specific social account ID to publish on.")
-    scheduled_datetime: datetime = Field(..., description="The precise date and time the post is scheduled to go live.")
-    
-    content: str = Field(..., description="The full caption, text, and hashtags of the post.")
-    media_placeholders: List[str] = Field(default_factory=list, description="Placeholders for images/videos attached to the post.")
-    
-    status: PublishStatus = Field(default=PublishStatus.SCHEDULED, description="The current status of the job.")
-    retry_count: int = Field(default=0, description="Number of times the system has tried to publish this post after a failure.")
-    error_message: Optional[str] = Field(None, description="The specific error message returned by the platform, if any.")
+    __tablename__ = "publish_jobs"
+
+    job_id = Column(String, primary_key=True, index=True)
+    platform = Column(String, nullable=False)
+    account_id = Column(String, nullable=False)
+    scheduled_datetime = Column(DateTime, nullable=False)
+    content = Column(String, nullable=False)
+    media_placeholders_json = Column(String, default="[]")
+    status = Column(String, default="Scheduled")
+    retry_count = Column(Integer, default=0)
+    error_message = Column(String, nullable=True)
+
+    @property
+    def media_placeholders(self):
+        try:
+            return json.loads(self.media_placeholders_json or "[]")
+        except Exception:
+            return []
+
+    @media_placeholders.setter
+    def media_placeholders(self, value):
+        self.media_placeholders_json = json.dumps(value or [])
+
+    def to_dict(self):
+        return {
+            "job_id": self.job_id,
+            "platform": self.platform,
+            "account_id": self.account_id,
+            "scheduled_datetime": self.scheduled_datetime,
+            "content": self.content,
+            "media_placeholders": self.media_placeholders,
+            "status": self.status,
+            "retry_count": self.retry_count,
+            "error_message": self.error_message
+        }

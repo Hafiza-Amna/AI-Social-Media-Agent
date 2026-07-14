@@ -8,10 +8,10 @@ from datetime import datetime
 from utils.tool_wrapper import FunctionTool
 from models.publish_request import PublishRequest
 from models.publish_response import PublishResponse
-from services.auto_publish_service import AutoPublishService
+from services.auto_publishing_service import AutoPublishingService
 
 logger = logging.getLogger(__name__)
-_publish_service = AutoPublishService()
+_publish_service = AutoPublishingService()
 
 
 def publish_post(request: PublishRequest) -> PublishResponse:

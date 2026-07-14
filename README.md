@@ -226,3 +226,14 @@ If you want to bypass the AI agent and call the publishing endpoint directly, yo
 1. **Access Token Lifespan:** Default LinkedIn User Access Tokens expire in **60 days**. For production setups, implement an OAuth redirect redirect URI flow that handles token refresh (using `refresh_token`).
 2. **Standard API Scopes:** To share to organizational pages (e.g. companies) instead of personal profile pages, the developer app must apply for the **Community Management API** product and request the `w_organization_social` scope.
 3. **API Rate Limits:** LinkedIn has strict daily limits on the number of shares a member can publish (typically 25 per day). Keep this in mind when running automated agents.
+
+---
+
+## 🧪 Running Tests
+
+To run the automated test suite, ensure your virtual environment is active and run `pytest`:
+
+```bash
+pytest
+```
+
