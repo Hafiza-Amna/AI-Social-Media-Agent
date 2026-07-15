@@ -13,7 +13,7 @@ By structuring the tools within this package, we adhere strictly to clean archit
 from .content_generator_tool import content_generator_tool
 from .calendar_tool import calendar_tool
 from .scheduling_tool import scheduling_tool
-from .publishing_tool import publishing_tool
+from .publishing_tool import publishing_tool, linkedin_publish_tool, instagram_publish_tool
 from .comment_tool import comment_tool
 from .dm_tool import dm_tool
 from .analytics_tool import analytics_tool
@@ -30,6 +30,8 @@ __all__ = [
     "calendar_tool",
     "scheduling_tool",
     "publishing_tool",
+    "linkedin_publish_tool",
+    "instagram_publish_tool",
     "comment_tool",
     "dm_tool",
     "analytics_tool",
@@ -37,3 +39,4 @@ __all__ = [
     "repurpose_tool",
     "team_tool"
 ]
+

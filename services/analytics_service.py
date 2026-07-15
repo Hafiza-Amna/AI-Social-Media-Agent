@@ -43,7 +43,7 @@ class AnalyticsService:
         """
         data_str = json.dumps(request.analytics_data, indent=2)
         prompt = ANALYTICS_PROMPT.format(
-            platform=request.platform.value,
+            platform=request.platform,
             analytics_data=data_str,
         )
 

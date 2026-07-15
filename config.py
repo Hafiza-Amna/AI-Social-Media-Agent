@@ -31,9 +31,12 @@ class Settings(BaseSettings):
     # Instagram Integration Keys
     IG_ACCESS_TOKEN: str = os.getenv("IG_ACCESS_TOKEN", "")
     IG_BUSINESS_ACCOUNT_ID: str = os.getenv("IG_BUSINESS_ACCOUNT_ID", "")
+    FACEBOOK_PAGE_ID: str = os.getenv("FACEBOOK_PAGE_ID", "")
 
     class Config:
         env_file = ".env"
+        extra = "ignore"
+
 
 # Create a global settings object to be imported across the application
 settings = Settings()

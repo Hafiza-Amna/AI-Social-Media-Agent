@@ -80,3 +80,52 @@ def publish_to_linkedin_tool(request: LinkedInPublishRequest) -> dict:
 
 
 linkedin_publish_tool = FunctionTool(func=publish_to_linkedin_tool)
+
+
+# ---------------------------------------------------------------------------
+# Instagram Real Publishing Tool
+# ---------------------------------------------------------------------------
+
+class InstagramPublishRequest(BaseModel):
+    content: str = Field(
+        ...,
+        description="The text caption content for the Instagram post.",
+    )
+    media_url: str = Field(
+        ...,
+        description="The public URL of the image or video to publish to Instagram. Instagram requires media to be published.",
+    )
+
+
+def publish_to_instagram_tool(content: str = None, media_url: str = None, request: InstagramPublishRequest = None) -> dict:
+    """
+    Publishes content immediately to Instagram via the Instagram Graph API.
+    Instagram requires both a caption ('content') and a public media link ('media_url').
+    Returns a JSON object with 'success' (bool), 'publication_id' (str), and 'message' (str).
+    """
+    logger.info("[instagram_publish_tool] Invoked — preparing to publish to Instagram API.")
+    
+    # Gracefully handle if the first positional arg is actually the Pydantic request object
+    if isinstance(content, InstagramPublishRequest):
+        request = content
+        content = request.content
+        media_url = request.media_url
+    elif request is not None:
+        content = request.content
+        media_url = request.media_url
+
+    # Construct the Pydantic request model to ensure validation
+    req_obj = InstagramPublishRequest(content=content, media_url=media_url)
+
+    from services.instagram_service import publish_to_instagram
+    result = publish_to_instagram(req_obj.content, req_obj.media_url)
+    if result.get("success"):
+        logger.info(f"[instagram_publish_tool] SUCCESS — publication_id: {result.get('publication_id')}")
+    else:
+        logger.error(f"[instagram_publish_tool] FAILED — {result.get('message')}")
+    return result
+
+
+instagram_publish_tool = FunctionTool(func=publish_to_instagram_tool)
+
+

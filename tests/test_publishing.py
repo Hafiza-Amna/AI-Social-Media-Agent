@@ -355,3 +355,36 @@ def test_rate_limit_returns_429():
 
     # At least one request should have been rate-limited (HTTP 429)
     assert 429 in responses, f"Expected a 429 response among: {set(responses)}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# publish_to_instagram_tool Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_publish_to_instagram_tool_success(mock_instagram_settings):
+    """Test publish_to_instagram_tool returns success response structure when the service succeeds."""
+    from tools.publishing_tool import publish_to_instagram_tool, InstagramPublishRequest
+
+    request = InstagramPublishRequest(
+        content="Testing tool call!",
+        media_url="https://example.com/test.jpg"
+    )
+
+    with patch("services.instagram_service.requests.post") as mock_post:
+        # Mock Step 1: create media container
+        container_response = MagicMock()
+        container_response.status_code = 200
+        container_response.json.return_value = {"id": "container_abc123"}
+
+        # Mock Step 2: publish media container
+        publish_response = MagicMock()
+        publish_response.status_code = 200
+        publish_response.json.return_value = {"id": "media_xyz789"}
+
+        mock_post.side_effect = [container_response, publish_response]
+
+        res = publish_to_instagram_tool(request)
+        assert res["success"] is True
+        assert res["publication_id"] == "media_xyz789"
+        assert "Successfully published" in res["message"]
+

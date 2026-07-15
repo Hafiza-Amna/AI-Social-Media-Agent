@@ -42,7 +42,7 @@ class SmartScheduleService:
         Returns optimised posting slots and predicted engagement scores.
         """
         prompt = SMART_SCHEDULE_PROMPT.format(
-            platform=request.platform.value,
+            platform=request.platform,
             timezone=request.timezone,
             content_type=request.content_type,
             posting_frequency=request.posting_frequency,

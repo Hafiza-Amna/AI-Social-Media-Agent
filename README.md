@@ -147,6 +147,7 @@ LINKEDIN_ACCESS_TOKEN="your_access_token_here"
 # Instagram Graph API Credentials
 IG_ACCESS_TOKEN="your_instagram_access_token_here"
 IG_BUSINESS_ACCOUNT_ID="your_instagram_business_account_id_here"
+FACEBOOK_PAGE_ID="your_facebook_page_id_here"
 ```
 
 ---
@@ -269,6 +270,7 @@ pytest -v
 | `test_instagram_invalid_token` | Instagram invalid token (code 190) |
 | `test_instagram_permission_denied` | Instagram permission denied (code 10) |
 | `test_instagram_publish_success_via_execute_job` | Instagram publish success (scheduled job) |
+| `test_publish_to_instagram_tool_success` | `instagram_publish_tool` ADK FunctionTool wrapper success |
 | `test_unsupported_platform_returns_validation_error` | Unsupported platform returns clean error |
 | `test_unsupported_platform_execute_job_returns_error` | Unsupported platform in execute_job fails cleanly |
 | `test_rate_limit_returns_429` | Rate limiter returns HTTP 429 when limit exceeded |

@@ -15,7 +15,7 @@ _content_service = ContentGeneratorService()
 def generate_content(request: ContentRequest) -> ContentResponse:
     """
     Generates highly engaging, platform-specific social media content.
-    Provide a detailed ContentRequest including topic, platform, tone, and audience.
+    Provide a detailed ContentRequest including topic, platform, tone, target_audience, and content_goal.
     """
     logger.info(f"Executing 'generate_content' for platform '{request.platform}'. Topic: '{request.topic}'")
 

@@ -48,7 +48,7 @@ class ContentGeneratorService:
         """
         prompt = CONTENT_GENERATION_PROMPT.format(
             topic=request.topic,
-            platform=request.platform.value,
+            platform=request.platform,
             tone=request.tone,
             target_audience=request.target_audience,
             content_goal=request.content_goal,

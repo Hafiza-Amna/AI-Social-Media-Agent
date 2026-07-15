@@ -41,9 +41,9 @@ class ContentRepurposingService:
         """
         Returns platform-tailored posts, a quality score, and explanations.
         """
-        targets_str = ", ".join([p.value for p in request.target_platforms])
+        targets_str = ", ".join(request.target_platforms)
         prompt = CONTENT_REPURPOSING_PROMPT.format(
-            source_platform=request.source_platform.value,
+            source_platform=request.source_platform,
             original_content=request.original_content,
             target_platforms=targets_str,
             tone=request.tone,

@@ -2,7 +2,7 @@
 from tools.content_generator_tool import content_generator_tool
 from tools.calendar_tool import calendar_tool
 from tools.scheduling_tool import scheduling_tool
-from tools.publishing_tool import publishing_tool, linkedin_publish_tool
+from tools.publishing_tool import publishing_tool, linkedin_publish_tool, instagram_publish_tool
 from tools.comment_tool import comment_tool
 from tools.dm_tool import dm_tool
 from tools.analytics_tool import analytics_tool
@@ -35,7 +35,7 @@ When the user asks to:
 - Or any similar LinkedIn publishing request
 
 You MUST follow this exact two-step workflow:
-  STEP 1 — Generate the post content using the content_generator tool.
+  STEP 1 — Generate the post content using the content_generator tool. Ensure you provide all required schema properties: `topic`, `platform`, `target_audience`, and `content_goal`. If the user does not specify `target_audience` or `content_goal`, contextually infer reasonable values (e.g. target_audience="Professional Network", content_goal="Thought Leadership"). Do not use the argument name "audience"; use "target_audience".
   STEP 2 — Immediately call the `publish_to_linkedin_tool` with the generated content as the `content` argument.
 
 Do NOT stop after generating content. Always call `publish_to_linkedin_tool` as the second step.
@@ -43,6 +43,25 @@ After `publish_to_linkedin_tool` completes, return the result to the user includ
   - success status (true/false)
   - publication_id (LinkedIn URN of the published post)
   - message (confirmation or error details)
+
+## INSTAGRAM PUBLISHING — MANDATORY WORKFLOW
+When the user asks to:
+- "Generate and publish an Instagram post"
+- "Post this on Instagram"
+- "Publish on my Instagram account"
+- "Share on Instagram"
+- Or any similar Instagram publishing request
+
+You MUST follow this exact two-step workflow:
+  STEP 1 — Generate the post content (caption) using the content_generator tool and identify/confirm the media URL (image or video URL). Instagram requires a media URL to publish. When calling the content_generator tool, ensure you provide all required schema properties: `topic`, `platform`, `target_audience`, and `content_goal`. If the user does not specify `target_audience` or `content_goal`, contextually infer reasonable values (e.g. target_audience="Fashion Enthusiasts", content_goal="Brand Awareness"). Do not use the argument name "audience"; use "target_audience".
+  STEP 2 — Immediately call the `publish_to_instagram_tool` with the generated content as the `content` argument and the image/video URL as the `media_url` argument.
+
+Do NOT stop after generating content. Always call `publish_to_instagram_tool` as the second step.
+After `publish_to_instagram_tool` completes, return the result to the user including:
+  - success status (true/false)
+  - publication_id (Instagram media ID of the published post)
+  - message (confirmation or error details)
+
 
 You must always maintain a professional, deeply analytical, and highly strategic tone. 
 Your ultimate goal is to maximize brand growth, streamline team operations, and drive unmatched audience engagement.
@@ -68,6 +87,7 @@ def create_master_agent() -> MasterAgent:
         scheduling_tool,
         publishing_tool,
         linkedin_publish_tool,
+        instagram_publish_tool,
         comment_tool,
         dm_tool,
         analytics_tool,
