@@ -118,8 +118,9 @@ class AutoPublishingService:
 
     def execute_job(self, job_id: str) -> PublishResponse:
         """
-        Executes a scheduled job from the database queue. If the platform is LinkedIn,
-        it uses the real LinkedIn service, otherwise simulates the API posting process.
+        Executes a scheduled job from the database queue. Dispatches to the real
+        platform service for LinkedIn and Instagram; returns a validation error
+        for unsupported platforms.
         """
         db = SessionLocal()
         try:
@@ -163,21 +164,41 @@ class AutoPublishingService:
                     scheduled_time=job.scheduled_datetime,
                     publication_id=publication_id
                 )
-            else:
-                # Simulated publish for other platforms
+
+            elif platform_lower == "instagram":
+                from config import settings
+                if not settings.IG_ACCESS_TOKEN:
+                    raise RuntimeError("IG_ACCESS_TOKEN is missing or empty in settings.")
+                if not settings.IG_BUSINESS_ACCOUNT_ID:
+                    raise RuntimeError("IG_BUSINESS_ACCOUNT_ID is missing or empty in settings.")
+
+                # Extract first media URL from stored placeholders or media fields
+                media_urls = getattr(job, "media_placeholders", []) or []
+                media_url = media_urls[0] if media_urls else None
+
+                logger.info("Executing real publishing to Instagram Graph API via execute_job...")
+                from services.instagram_service import InstagramService
+                instagram_service = InstagramService()
+                publication_id = instagram_service.publish_instagram_post(job.content, media_url)
+
                 job.status = PublishStatus.PUBLISHED.value
                 job.error_message = None
                 db.commit()
                 db.refresh(job)
-                
+
                 return PublishResponse(
                     success=True,
-                    message=f"Successfully simulated publishing to {job.platform}.",
+                    message="Successfully published post to Instagram.",
                     job=job.to_dict(),
-                    publishing_status="Success (Simulated)",
+                    publishing_status="Success",
                     platform=job.platform,
                     scheduled_time=job.scheduled_datetime,
-                    publication_id=f"simulated_{job.job_id[:8]}"
+                    publication_id=publication_id
+                )
+
+            else:
+                raise ValueError(
+                    f"Unsupported platform '{job.platform}'. Supported platforms: LinkedIn, Instagram."
                 )
 
         except Exception as e:
@@ -279,22 +300,59 @@ class AutoPublishingService:
                     message=f"LinkedIn Publishing Error: {str(e)}",
                     publication_id=None
                 )
-        
-        # Fallback simulation for other platforms (e.g. Instagram, Facebook, X)
-        logger.info(f"Simulating publishing to {request.platform}...")
-        logger.debug(f"Content: {request.content}")
-        media_urls = getattr(request, "media_urls", [])
-        if media_urls:
-            logger.debug(f"Media attached: {len(media_urls)} items.")
 
-        # Generate a simulated publication ID
-        platform_slug = request.platform.lower().replace(" ", "_").replace("(", "").replace(")", "")
-        simulated_pub_id = f"{platform_slug}_post_{uuid.uuid4().hex[:8]}"
+        elif platform_lower == "instagram":
+            from config import settings
+            if not settings.IG_ACCESS_TOKEN:
+                return PublishResponse(
+                    publishing_status="Failed",
+                    platform=request.platform,
+                    scheduled_time=scheduled_dt,
+                    message="Configuration Error: IG_ACCESS_TOKEN is missing or empty in your environment/settings.",
+                    publication_id=None
+                )
+            if not settings.IG_BUSINESS_ACCOUNT_ID:
+                return PublishResponse(
+                    publishing_status="Failed",
+                    platform=request.platform,
+                    scheduled_time=scheduled_dt,
+                    message="Configuration Error: IG_BUSINESS_ACCOUNT_ID is missing or empty in your environment/settings.",
+                    publication_id=None
+                )
 
-        return PublishResponse(
-            publishing_status="Success (Simulated)",
-            platform=request.platform,
-            scheduled_time=scheduled_dt,
-            message=f"Successfully simulated publishing to {request.platform}.",
-            publication_id=simulated_pub_id
-        )
+            media_urls = getattr(request, "media_urls", []) or []
+            media_url = media_urls[0] if media_urls else None
+
+            try:
+                logger.info("Executing real publishing to Instagram Graph API...")
+                from services.instagram_service import InstagramService
+                instagram_service = InstagramService()
+                publication_id = instagram_service.publish_instagram_post(request.content, media_url)
+
+                return PublishResponse(
+                    publishing_status="Success",
+                    platform=request.platform,
+                    scheduled_time=scheduled_dt,
+                    message="Successfully published post to Instagram.",
+                    publication_id=publication_id
+                )
+            except Exception as e:
+                logger.error(f"Failed to publish to Instagram: {e}", exc_info=True)
+                return PublishResponse(
+                    publishing_status="Failed",
+                    platform=request.platform,
+                    scheduled_time=scheduled_dt,
+                    message=f"Instagram Publishing Error: {str(e)}",
+                    publication_id=None
+                )
+
+        else:
+            # Unsupported platform — return clean validation error
+            logger.warning(f"Unsupported platform requested: {request.platform}")
+            return PublishResponse(
+                publishing_status="Failed",
+                platform=request.platform,
+                scheduled_time=scheduled_dt,
+                message=f"Validation Error: Platform '{request.platform}' is not supported. Supported platforms: LinkedIn, Instagram.",
+                publication_id=None
+            )

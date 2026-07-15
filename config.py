@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     LINKEDIN_CLIENT_SECRET: str = os.getenv("LINKEDIN_CLIENT_SECRET", "")
     LINKEDIN_ACCESS_TOKEN: str = os.getenv("LINKEDIN_ACCESS_TOKEN", "")
 
+    # Instagram Integration Keys
+    IG_ACCESS_TOKEN: str = os.getenv("IG_ACCESS_TOKEN", "")
+    IG_BUSINESS_ACCOUNT_ID: str = os.getenv("IG_BUSINESS_ACCOUNT_ID", "")
+
     class Config:
         env_file = ".env"
 

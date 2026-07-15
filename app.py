@@ -13,6 +13,9 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from router import AIIntentRouter
 
@@ -59,6 +62,11 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down AI Social Media Agent API.")
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Rate Limiter — IP-based, 20 requests per minute on /chat
+# ─────────────────────────────────────────────────────────────────────────────
+limiter = Limiter(key_func=get_remote_address)
+
+# ─────────────────────────────────────────────────────────────────────────────
 # FastAPI App
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -72,6 +80,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Attach the rate limiter state and 429 handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CORS Middleware — allows the frontend to call this API
@@ -109,7 +121,8 @@ async def health_check():
 # Core Chat Endpoint
 # ─────────────────────────────────────────────────────────────────────────────
 @app.post("/chat", response_model=ChatResponse, tags=["Agent"])
-async def chat(request: ChatRequest, fastapi_request: Request):
+@limiter.limit("20/minute")
+async def chat(request: Request, body: ChatRequest):
     """
     Primary conversational endpoint.
     
@@ -117,23 +130,23 @@ async def chat(request: ChatRequest, fastapi_request: Request):
     The Master Agent (Gemini 2.5 Flash Lite) autonomously selects and executes the
     correct tool based on the user's intent, then returns a synthesized response.
     """
-    logger.info(f"POST /chat | user_id='{request.user_id}' | message='{request.message}'")
+    logger.info(f"POST /chat | user_id='{body.user_id}' | message='{body.message}'")
 
-    router: AIIntentRouter = fastapi_request.app.state.router
+    router: AIIntentRouter = request.app.state.router
 
     # Validate message is not just whitespace (Pydantic min_length handles empty strings)
-    if not request.message.strip():
+    if not body.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be blank or whitespace-only.")
 
     # Route through the ADK agent asynchronously
     agent_response = await router.process_request_async(
-        user_message=request.message,
-        user_id=request.user_id
+        user_message=body.message,
+        user_id=body.user_id
     )
 
     return ChatResponse(
-        user_id=request.user_id,
-        message=request.message,
+        user_id=body.user_id,
+        message=body.message,
         response=agent_response
     )
 
