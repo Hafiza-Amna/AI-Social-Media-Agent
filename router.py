@@ -75,6 +75,12 @@ class AIIntentRouter:
         """
         Async entry point — processes a raw user message and returns the
         final synthesized natural-language response.
+
+        When a publish tool (publish_to_linkedin_tool / publish_to_instagram_tool)
+        is invoked, the return value is a JSON string containing:
+            {"response": str, "job_id": str, "status": "pending_review"}
+        so the /chat endpoint can surface job_id to the caller.
+        For all other requests a plain string is returned.
         """
         logger.info(f"[Router] user_id='{user_id}' | message='{user_message[:120]}'")
 
@@ -89,6 +95,10 @@ class AIIntentRouter:
             {"role": "system", "content": self._system_prompt},
             {"role": "user",   "content": user_message},
         ]
+
+        # Tracks the first publish-tool result so we can return job_id
+        _publish_result: dict | None = None
+        PUBLISH_TOOLS = {"publish_to_linkedin_tool", "publish_to_instagram_tool"}
 
         try:
             # ── Step 1: Initial LLM call with tool schema ──────────────
@@ -118,6 +128,14 @@ class AIIntentRouter:
                     logger.info(f"[Router] Executing tool '{fn_name}' | args={fn_args[:200]}")
 
                     tool_result_content = self._execute_tool(fn_name, fn_args)
+
+                    # Capture publish tool results so we can return job_id
+                    if fn_name in PUBLISH_TOOLS and _publish_result is None:
+                        try:
+                            _publish_result = json.loads(tool_result_content)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+
                     messages.append({
                         "role":        "tool",
                         "tool_call_id": tc_id,
@@ -127,12 +145,44 @@ class AIIntentRouter:
 
                 # ── Step 3: Re-invoke LLM to synthesize final answer ───
                 logger.info("[Router] Synthesizing final response from tool output.")
+
+                # If a publish tool ran, tell the LLM exactly what to say
+                if _publish_result:
+                    job_id = _publish_result.get("job_id")
+                    content_preview = (_publish_result.get("content") or "")[:200]
+                    messages.append({
+                        "role": "system",
+                        "content": (
+                            "IMPORTANT: The post has been QUEUED for human approval. "
+                            "It has NOT been published yet. "
+                            f"The job_id is: {job_id}. "
+                            "Tell the user: their post has been saved with status 'pending_review', "
+                            f"the job_id is {job_id}, and they must call "
+                            f"POST /review/{job_id} with action='approve' to publish it. "
+                            "Do NOT say 'successfully published'. "
+                            "Do NOT claim the post is live."
+                        )
+                    })
+
                 final = litellm.completion(
                     model=self._model_name,
                     messages=messages,
                     temperature=0.5,
                 )
-                return final.choices[0].message.content or ""
+                final_text = final.choices[0].message.content or ""
+
+                # If a publish tool ran, return a structured JSON payload
+                if _publish_result:
+                    job_id = _publish_result.get("job_id")
+                    return json.dumps({
+                        "response": final_text,
+                        "job_id": job_id,
+                        "status": "pending_review",
+                        "content": _publish_result.get("content", ""),
+                        "platform": _publish_result.get("platform", ""),
+                    })
+
+                return final_text
 
             # No tool calls — direct answer
             if response_message.content:
@@ -158,6 +208,7 @@ class AIIntentRouter:
                 "Content Generation, Scheduling, Publishing, Comment/DM Replies, "
                 "Analytics, Competitor Analysis, Content Repurposing, or Team Collaboration."
             )
+
 
     def process_request(
         self, user_message: str, user_id: str = "default_user"

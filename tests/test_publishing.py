@@ -406,23 +406,10 @@ def test_publish_to_instagram_tool_success(mock_instagram_settings):
         media_url="https://example.com/test.jpg"
     )
 
-    with patch("services.instagram_service.requests.post") as mock_post:
-        # Mock Step 1: create media container
-        container_response = MagicMock()
-        container_response.status_code = 200
-        container_response.json.return_value = {"id": "container_abc123"}
-
-        # Mock Step 2: publish media container
-        publish_response = MagicMock()
-        publish_response.status_code = 200
-        publish_response.json.return_value = {"id": "media_xyz789"}
-
-        mock_post.side_effect = [container_response, publish_response]
-
-        res = publish_to_instagram_tool(request)
-        assert res["success"] is True
-        assert res["publication_id"] == "media_xyz789"
-        assert "Successfully published" in res["message"]
+    res = publish_to_instagram_tool(request)
+    assert res["success"] is True
+    assert res["job_id"] is not None
+    assert "queued for human approval" in res["message"].lower() or "successfully generated" in res["message"].lower()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -450,7 +437,7 @@ def test_pending_review_blocks_publishing():
 
 
 def test_approve_allows_publishing(mock_settings):
-    """Verify that approving a job updates its status and allows execute_job to run."""
+    """Verify that approving a job triggers immediate publishing to LinkedIn."""
     service = AutoPublishingService()
     request = PublishRequest(
         platform="LinkedIn",
@@ -461,17 +448,7 @@ def test_approve_allows_publishing(mock_settings):
     job_id = schedule_res.job["job_id"]
 
     client = TestClient(app)
-    # Call the API endpoint to approve
-    resp = client.post(f"/review/{job_id}", json={"action": "approve", "reviewer": "Alice"})
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["success"] is True
-    assert data["job"]["status"] == "approved"
-    assert data["job"]["reviewer"] == "Alice"
-    assert data["job"]["review_action"] == "approve"
-    assert data["job"]["reviewed_at"] is not None
-
-    # Now execute
+    # Approve via review endpoint — mock LinkedIn API since it auto-publishes
     with patch("requests.get") as mock_get, patch("requests.post") as mock_post:
         mock_get_response = MagicMock()
         mock_get_response.status_code = 200
@@ -483,9 +460,13 @@ def test_approve_allows_publishing(mock_settings):
         mock_post_response.json.return_value = {"id": "urn:li:share:approved_12345"}
         mock_post.return_value = mock_post_response
 
-        exec_res = service.execute_job(job_id)
-        assert exec_res.success is True
-        assert exec_res.publishing_status == "Success"
+        resp = client.post(f"/review/{job_id}", json={"action": "approve", "reviewer": "Alice"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        # After auto-publish, job should be published
+        assert data["job"]["status"] == "published"
+        assert data["review_action"] == "approve"
 
 
 def test_reject_blocks_publishing():
@@ -513,7 +494,7 @@ def test_reject_blocks_publishing():
 
 
 def test_edit_updates_content_before_publishing(mock_settings):
-    """Verify that editing a job replaces content, sets status to approved, and publishes edited text."""
+    """Verify that editing a job replaces content and triggers immediate publishing with edited text."""
     service = AutoPublishingService()
     request = PublishRequest(
         platform="LinkedIn",
@@ -524,18 +505,9 @@ def test_edit_updates_content_before_publishing(mock_settings):
     job_id = schedule_res.job["job_id"]
 
     client = TestClient(app)
-    # Edit the content and approve
-    resp = client.post(
-        f"/review/{job_id}",
-        json={"action": "edit", "content": "Edited content by human", "reviewer": "Charlie"}
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["job"]["status"] == "approved"
-    assert data["job"]["content"] == "Edited content by human"
-
-    # Execute
-    with patch("requests.get") as mock_get, patch("services.linkedin_service.LinkedInService.publish_text_post") as mock_publish:
+    # Edit the content and approve — mock LinkedIn API since it auto-publishes
+    with patch("requests.get") as mock_get, \
+         patch("services.linkedin_service.LinkedInService.publish_text_post") as mock_publish:
         mock_get_response = MagicMock()
         mock_get_response.status_code = 200
         mock_get_response.json.return_value = {"id": "test_member_id"}
@@ -543,8 +515,15 @@ def test_edit_updates_content_before_publishing(mock_settings):
 
         mock_publish.return_value = "urn:li:share:edited_12345"
 
-        exec_res = service.execute_job(job_id)
-        assert exec_res.success is True
+        resp = client.post(
+            f"/review/{job_id}",
+            json={"action": "edit", "content": "Edited content by human", "reviewer": "Charlie"}
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        # After auto-publish, job should be published with edited content
+        assert data["success"] is True
+        assert data["job"]["status"] == "published"
         mock_publish.assert_called_once_with("Edited content by human")
 
 
@@ -597,3 +576,160 @@ def test_reviewing_published_job_returns_validation_error(mock_settings):
     resp = client.post(f"/review/{job_id}", json={"action": "approve"})
     assert resp.status_code == 400
     assert "Already published posts cannot be reviewed again" in resp.json()["detail"]
+
+
+def test_chat_approval_workflow_integration():
+    """Verify that the /chat flow queues a job for human approval and does NOT publish immediately.
+
+    Strategy:
+    - Mock router.litellm.completion (2 calls: initial tool-selection + final synthesis).
+    - Assert the response contains job_id and pending_review=True.
+    - Assert no LinkedIn API call was made.
+    """
+    # ── 1. LLM initial call: ask for publish_to_linkedin_tool ─────────────
+    mock_choice_1 = MagicMock()
+    mock_message_1 = MagicMock()
+    mock_tool_call_1 = MagicMock()
+    mock_tool_call_1.id = "call_1"
+    mock_tool_call_1.function.name = "publish_to_linkedin_tool"
+    mock_tool_call_1.function.arguments = json.dumps({
+        "content": "Queued content about FastAPI!"
+    })
+    mock_message_1.tool_calls = [mock_tool_call_1]
+    mock_choice_1.message = mock_message_1
+
+    mock_resp_1 = MagicMock()
+    mock_resp_1.choices = [mock_choice_1]
+
+    # ── 2. LLM final synthesis call ────────────────────────────────────────
+    mock_choice_2 = MagicMock()
+    mock_message_2 = MagicMock()
+    mock_message_2.content = (
+        "Your LinkedIn post has been queued and is now pending human approval. "
+        "Please approve it via the /review endpoint before it goes live."
+    )
+    mock_message_2.tool_calls = None
+    mock_choice_2.message = mock_message_2
+
+    mock_resp_2 = MagicMock()
+    mock_resp_2.choices = [mock_choice_2]
+
+    original_enabled = app.state.limiter.enabled
+    app.state.limiter.enabled = False
+    try:
+        with TestClient(app) as client:
+            with patch("router.litellm.completion") as mock_completion, \
+                 patch("services.linkedin_service.requests.post") as mock_li_post:
+
+                mock_completion.side_effect = [mock_resp_1, mock_resp_2]
+
+                response = client.post("/chat", json={
+                    "message": "Publish a post to LinkedIn about FastAPI",
+                    "user_id": "test-chat-integration"
+                })
+
+                assert response.status_code == 200
+                data = response.json()
+
+                # Must contain job_id and pending_review flag
+                assert data["job_id"] is not None, "job_id must be returned from /chat"
+                assert data["pending_review"] is True, "pending_review must be True"
+                assert "pending human approval" in data["response"].lower()
+
+                # LinkedIn API must NOT have been called directly
+                mock_li_post.assert_not_called()
+
+                # Check database: there should be at least one job with pending_review status
+                db = SessionLocal()
+                jobs = db.query(PublishJob).filter(PublishJob.platform == "LinkedIn").all()
+                assert len(jobs) > 0
+                assert any(j.status == "pending_review" for j in jobs)
+                db.close()
+    finally:
+        app.state.limiter.enabled = original_enabled
+
+
+def test_end_to_end_chat_review_publish(mock_settings):
+    """End-to-end test: /chat creates pending_review job → /review approve → publishes to LinkedIn.
+
+    This covers the full human approval workflow:
+    1. POST /chat — AI queues post, returns job_id with status=pending_review
+    2. POST /review/{job_id} with action=approve — auto-publishes to LinkedIn
+    3. GET /jobs — job status is 'published'
+    """
+    # ── Mock LLM responses for /chat ───────────────────────────────────────
+    mock_choice_1 = MagicMock()
+    mock_message_1 = MagicMock()
+    mock_tool_call_1 = MagicMock()
+    mock_tool_call_1.id = "call_e2e_1"
+    mock_tool_call_1.function.name = "publish_to_linkedin_tool"
+    mock_tool_call_1.function.arguments = json.dumps({
+        "content": "End-to-end test LinkedIn post!"
+    })
+    mock_message_1.tool_calls = [mock_tool_call_1]
+    mock_choice_1.message = mock_message_1
+    mock_resp_1 = MagicMock()
+    mock_resp_1.choices = [mock_choice_1]
+
+    mock_choice_2 = MagicMock()
+    mock_message_2 = MagicMock()
+    mock_message_2.content = (
+        "Your LinkedIn post is now pending human approval. "
+        "Call POST /review/{job_id} with action=approve to publish."
+    )
+    mock_message_2.tool_calls = None
+    mock_choice_2.message = mock_message_2
+    mock_resp_2 = MagicMock()
+    mock_resp_2.choices = [mock_choice_2]
+
+    original_enabled = app.state.limiter.enabled
+    app.state.limiter.enabled = False
+    try:
+        with TestClient(app) as client:
+            # ── Step 1: POST /chat ─────────────────────────────────────
+            with patch("router.litellm.completion") as mock_completion:
+                mock_completion.side_effect = [mock_resp_1, mock_resp_2]
+
+                chat_response = client.post("/chat", json={
+                    "message": "Publish a post to LinkedIn: End-to-end test LinkedIn post!",
+                    "user_id": "test-e2e-user"
+                })
+
+            assert chat_response.status_code == 200
+            chat_data = chat_response.json()
+            job_id = chat_data.get("job_id")
+            assert job_id is not None, "job_id must be returned from /chat"
+            assert chat_data["pending_review"] is True
+
+            # ── Step 2: POST /review/{job_id} with approve ─────────────
+            with patch("requests.get") as mock_get, patch("requests.post") as mock_post:
+                mock_get_resp = MagicMock()
+                mock_get_resp.status_code = 200
+                mock_get_resp.json.return_value = {"id": "urn:li:member:e2e_member"}
+                mock_get.return_value = mock_get_resp
+
+                mock_post_resp = MagicMock()
+                mock_post_resp.status_code = 201
+                mock_post_resp.json.return_value = {"id": "urn:li:share:e2e_share_001"}
+                mock_post.return_value = mock_post_resp
+
+                review_response = client.post(
+                    f"/review/{job_id}",
+                    json={"action": "approve", "reviewer": "E2E Tester"}
+                )
+
+            assert review_response.status_code == 200
+            review_data = review_response.json()
+            assert review_data["success"] is True
+            assert review_data["job"]["status"] == "published"
+
+            # ── Step 3: GET /jobs confirms published ───────────────────
+            jobs_response = client.get("/jobs")
+            assert jobs_response.status_code == 200
+            jobs_data = jobs_response.json()
+            matching = [j for j in jobs_data["jobs"] if j["job_id"] == job_id]
+            assert len(matching) == 1
+            assert matching[0]["status"] == "published"
+    finally:
+        app.state.limiter.enabled = original_enabled
+

@@ -12,6 +12,7 @@ class PublishResponse(BaseModel):
     scheduled_time: Optional[datetime] = Field(None, description="The time the post was originally scheduled for.")
     message: str = Field(..., description="A detailed success or failure message describing the outcome.")
     publication_id: Optional[str] = Field(None, description="The unique ID returned by the platform upon successful publication.")
+    publication_url: Optional[str] = Field(None, description="The public URL of the published post, if available.")
 
     # Fields returned by auto_publishing_service for queue management compatibility
     success: Optional[bool] = Field(None, description="Whether the operation succeeded.")

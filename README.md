@@ -1,23 +1,21 @@
 # AI Social Media Agent
 
-A modular, production-ready AI Social Media Agent inspired by FeedHive. The application acts as a central orchestrator (Master Agent) powered by Gemini and LiteLLM, coordinating sub-agents and domain-specific services to automate content creation, publishing, scheduling, analytics, competitor analysis, and team collaboration.
+A modular, production-ready AI Social Media Agent inspired by FeedHive. The application acts as a central orchestrator (Master Agent) powered by Gemini and LiteLLM, coordinating sub-agents and domain-specific services to automate content creation, A/B caption generation, publishing, scheduling, analytics, competitor analysis, and team collaboration.
 
 ---
 
 ## 🌟 Features
 
 - **Content Generation & Repurposing:** Generate engaging posts tailored to platform conventions (LinkedIn, Instagram, Twitter, Facebook, etc.) and repurpose them seamlessly.
+- **A/B Caption Variants (NEW):** Generate two distinct caption versions (Variant A for storytelling, Variant B for conversion) for A/B testing.
 - **Smart Scheduling & Publishing:** Calculate optimal engagement times mathematically based on historical data.
 - **LinkedIn OAuth 2.0 Authentication:** Seamless redirect flow to authenticate members and automatically save user tokens to secure storage.
-- **Real LinkedIn API Integration:** Real-world connection to the LinkedIn API using member URNs and UGC post creation.
+- **Real LinkedIn API Integration:** Real-world connection to the LinkedIn API using member URNs and UGC post creation. Returns public post URLs directly in the API.
 - **Real Instagram Graph API Integration:** Two-step container-and-publish flow via the official Instagram Graph API.
-- **AI-generated Post Publishing:** Autonomously generate, approve, and publish content directly to LinkedIn or Instagram.
-- **Automatic Publication Confirmation:** Retrieve unique platform IDs and update publication status in the state machine.
+- **Human Approval Workflow:** Autonomously generate posts that are queued for human review. Approved posts are published directly to LinkedIn or Instagram.
 - **SQLite Persistence (SQLAlchemy):** Full database schema configuration to store and manage scheduled publishing jobs queue permanently.
 - **API Rate Limiting (slowapi):** IP-based rate limiting on the `/chat` endpoint (20 requests/minute) with HTTP 429 responses.
 - **Automated Testing with Pytest:** Complete unit testing suite with mocked requests and router exception safety verification.
-- **Audience & Competitor Intelligence:** Perform deep sentiment analysis on comments/DMs, draft automated replies, and execute competitor SWOT analysis.
-- **Team Collaboration:** Task assignment, review status workflows, and approval cycles.
 
 ---
 
@@ -27,67 +25,11 @@ A modular, production-ready AI Social Media Agent inspired by FeedHive. The appl
 - **API Engine:** FastAPI (ASGI Server via Uvicorn)
 - **Database ORM:** SQLAlchemy
 - **Database Engine:** SQLite (Persistent database stored in `publish_jobs.db`)
-- **Agent Orchestration:** LiteLLM-powered tool-calling router (defaulting to Gemini 2.5 Flash Lite)
+- **Agent Orchestration:** LiteLLM-powered tool-calling router
 - **Configuration & Validation:** Pydantic v2 & Pydantic Settings
 - **HTTP Client:** Requests
 - **Rate Limiting:** slowapi (starlette-compatible `limits` integration)
 - **Test Framework:** Pytest
-
----
-
-## 📂 Project Architecture
-
-```text
-AI-Social-Media-Agent/
-│
-├── agents/             # Agent definitions & system instructions
-│   └── social_media_agent.py
-│
-├── api/                # FastAPI routing & API controller handlers
-│
-├── models/             # Pydantic schemas & SQLAlchemy entities
-│   ├── brand_profile.py
-│   ├── calendar_post.py
-│   ├── publish_job.py         # SQLAlchemy PublishJob model & statuses
-│   ├── publish_request.py     # Schema for publishing payloads
-│   ├── publish_response.py    # Schema for publishing outcomes
-│   └── ... (additional request/response models)
-│
-├── prompts/            # System & agent interaction prompts
-│   ├── brand_voice_prompt.py
-│   ├── competitor_analysis_prompt.py
-│   └── ...
-│
-├── services/           # Business logic & background processes
-│   ├── analytics_service.py
-│   ├── auto_publishing_service.py      # Multi-platform publisher (LinkedIn + Instagram)
-│   ├── competitor_analysis_service.py
-│   ├── instagram_service.py            # Instagram Graph API integration (NEW)
-│   ├── linkedin_service.py             # Live LinkedIn API requests service
-│   ├── smart_schedule_service.py       # Primary scheduler service
-│   └── ...
-│
-├── tests/              # Test suite
-│   └── test_publishing.py    # Unit tests for LinkedIn, Instagram, rate limiting & router
-│
-├── tools/              # Central tool definitions wrapping services
-│   ├── analytics_tool.py
-│   ├── calendar_tool.py
-│   ├── publishing_tool.py    # Interfaces with AutoPublishingService
-│   └── ...
-│
-├── utils/              # Helper utilities (LiteLLM provider, factory wrappers)
-│   ├── litellm_helper.py
-│   └── provider_factory.py
-│
-├── .env.example        # Environment variables template
-│   .gitignore          # Git exclusion rules
-├── app.py              # Main FastAPI application, OAuth callbacks & rate limiting
-├── config.py           # Application configurations (Pydantic settings)
-├── database.py         # SQLAlchemy & SQLite database setup script
-├── requirements.txt    # Application package dependencies
-└── router.py           # Master AI Intent Router & Orchestrator
-```
 
 ---
 
@@ -114,7 +56,7 @@ Create and activate a virtual environment to manage dependencies cleanly:
   ```
 
 ### 3. Install Dependencies
-Install all required packages:
+Install all required packages from `requirements.txt`:
 ```bash
 pip install -r requirements.txt
 ```
@@ -124,13 +66,8 @@ Copy `.env.example` to `.env` and fill in your API credentials:
 ```bash
 copy .env.example .env
 ```
-Ensure you provide a valid API key (e.g., `GEMINI_API_KEY`) based on your configured provider.
 
----
-
-## ⚙️ Environment Variables
-Open the `.env` file in the root of your project directory and configure the following:
-
+Ensure you configure the following in your `.env` file:
 ```ini
 # Core LLM API Key
 GEMINI_API_KEY="AIzaSy..."
@@ -152,6 +89,87 @@ FACEBOOK_PAGE_ID="your_facebook_page_id_here"
 
 ---
 
+## 🖥️ Running the Application
+
+Start the FastAPI development server with reload enabled using your virtual environment:
+
+```bash
+.venv\Scripts\python.exe -m uvicorn app:app --reload --port 8001
+```
+The server will start running at `http://127.0.0.1:8001`. You can access the Swagger UI documentation at `http://127.0.0.1:8001/docs`.
+
+---
+
+## 🔗 API Endpoints Overview
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/chat` | Primary conversational agent endpoint (rate limited: 20/min) |
+| `GET`  | `/jobs` | List all publishing jobs in the queue (supports `?status=pending_review`) |
+| `POST` | `/review/{job_id}` | Review/approve/reject/edit pending social posts. **Approving auto-publishes the post.** |
+| `POST` | `/execute_job/{job_id}`| Manually trigger the publishing of an approved job |
+| `GET`  | `/linkedin/login` | Initiate LinkedIn OAuth flow |
+| `GET`  | `/linkedin/callback` | LinkedIn OAuth callback & token exchange |
+| `GET`  | `/health` | Health check |
+| `GET`  | `/docs` | Swagger UI (OpenAPI) |
+
+---
+
+## 👥 Human Content Approval Workflow
+
+All AI-generated social media posts automatically enter a `pending_review` state. Posts cannot be published until a human approves or edits them. 
+
+### Workflow Diagram
+
+```mermaid
+graph TD
+    A[AI Generates Content via /chat] --> B[Save in SQLite status='pending_review']
+    B --> C{Human Review via /review/job_id}
+    C -->|Approve| D[Status: approved]
+    C -->|Reject| E[Status: rejected]
+    C -->|Edit| F[Replace content & Status: approved]
+    D --> G[Auto-Publish to LinkedIn/Instagram API]
+    F --> G
+    G --> H[Return Public URL and URN]
+    E --> I[Execution blocked]
+```
+
+### Testing the Workflow via Swagger UI
+
+1. Open `http://127.0.0.1:8001/docs`.
+2. Expand `POST /chat` and click **Try it out**.
+3. Send a message like: `"Generate and publish a LinkedIn post about AI trends."`
+4. The response will return a `job_id` and indicate the post is `pending_review`.
+5. Expand `POST /review/{job_id}` and click **Try it out**.
+6. Enter the `job_id` and use the action `"approve"`. 
+7. The response will return `success: true` and provide the LinkedIn `publication_id` and `publication_url`!
+
+---
+
+## 📝 A/B Caption Variants
+
+You can now ask the agent to generate A/B caption variants for your posts. This feature is tailored for A/B testing marketing campaigns.
+
+**Variant A** focuses on storytelling and emotional hooks.  
+**Variant B** focuses on concise, benefit-driven messaging and conversions.
+
+### Example Request (`POST /chat`)
+```json
+{
+  "message": "Generate A/B caption variants for a LinkedIn post about our new AI product launch. Brand: TechNova. Audience: Software Engineers. Goal: Signups. Tone: Professional."
+}
+```
+
+### Example Response
+```json
+{
+  "response": "Here are the A/B variants in JSON format:\n\n```json\n{\n  \"variant_A\": {\n    \"caption\": \"We've always believed that coding shouldn't feel like a chore... Introducing TechNova AI...\",\n    \"hashtags\": [\"#SoftwareEngineering\", \"#TechNova\"],\n    \"cta\": \"Read the full story on our blog.\"\n  },\n  \"variant_B\": {\n    \"caption\": \"Increase your team's coding velocity by 40% with TechNova AI...\",\n    \"hashtags\": [\"#Productivity\", \"#AI\"],\n    \"cta\": \"Sign up for early access today.\"\n  }\n}\n```",
+  "status": "success"
+}
+```
+
+---
+
 ## 🔗 LinkedIn OAuth 2.0 Integration & Setup Guide
 
 The application includes a production-ready, real-world integration with the **LinkedIn UGC (User Generated Content) API**. 
@@ -163,50 +181,12 @@ The application includes a production-ready, real-world integration with the **L
    - **Share on LinkedIn** (grants the `w_member_social` permission).
    - **Sign In with LinkedIn** (used to retrieve member ID).
 4. Configure redirect URIs in the **Auth** tab of your app to match:
-   `http://localhost:8000/linkedin/callback`
+   `http://127.0.0.1:8001/linkedin/callback`
 
 ### 2. Live OAuth Code Flow
-1. Navigate to `http://localhost:8000/linkedin/login` in your browser.
+1. Navigate to `http://127.0.0.1:8001/linkedin/login` in your browser.
 2. Grant permissions in the LinkedIn authorization dialog.
 3. The server callback at `/linkedin/callback` will exchange the authorization code for a User Access Token, save it into your `.env` file automatically, and update the application memory state.
-
----
-
-## 📸 Instagram Graph API Setup
-
-The application supports publishing images and videos directly to Instagram Business accounts via the **Instagram Graph API**.
-
-### Prerequisites
-1. You need a **Facebook Developer Account** and a **Facebook App** with the Instagram product added.
-2. Your Instagram account must be a **Professional account** (Business or Creator) linked to a Facebook Page.
-
-### Setup Steps
-1. Go to [Meta for Developers](https://developers.facebook.com/) and create or open your Facebook App.
-2. Add the **Instagram** product to your app under **Add a Product**.
-3. Navigate to **Instagram → Basic Display** or **Instagram → Graph API** depending on your use case.
-4. Required permissions for publishing:
-   - `instagram_basic`
-   - `instagram_content_publish`
-5. Retrieve your **Instagram Business Account ID**:
-   ```
-   GET https://graph.facebook.com/v17.0/me/accounts?access_token={your_token}
-   ```
-   Then:
-   ```
-   GET https://graph.facebook.com/v17.0/{page_id}?fields=instagram_business_account&access_token={your_token}
-   ```
-6. Add the credentials to your `.env` file:
-   ```ini
-   IG_ACCESS_TOKEN="EAAGm0..."
-   IG_BUSINESS_ACCOUNT_ID="17841405..."
-   ```
-
-### Publishing Flow
-The service implements the official two-step flow:
-1. **Create Media Container** — `POST /{ig-user-id}/media`
-2. **Publish Media Container** — `POST /{ig-user-id}/media_publish`
-
-Both image and video posts are supported (video posts use `media_type=VIDEO` + `video_url`).
 
 ---
 
@@ -218,29 +198,7 @@ The `/chat` endpoint is protected by IP-based rate limiting powered by **slowapi
 |----------|-------|--------|
 | `POST /chat` | 20 requests | per minute per IP |
 
-When the limit is exceeded, the API responds with **HTTP 429 Too Many Requests**.
-
-```json
-{
-  "error": "Rate limit exceeded: 20 per 1 minute"
-}
-```
-
-This does not affect the Swagger UI (`/docs`) or any other endpoint.
-
----
-
-## 🖥️ Running the Application
-
-Start the FastAPI development server with reload enabled:
-```bash
-python app.py
-```
-Alternatively, run directly with Uvicorn:
-```bash
-uvicorn app:app --host 127.0.0.1 --port 8000 --reload
-```
-The server will start running at `http://127.0.0.1:8000`.
+When the limit is exceeded, the API responds with **HTTP 429 Too Many Requests**. This does not affect the Swagger UI (`/docs`) or any other endpoint.
 
 ---
 
@@ -249,115 +207,7 @@ The server will start running at `http://127.0.0.1:8000`.
 Ensure your virtual environment is active and run `pytest` to execute all unit tests:
 
 ```bash
-.venv\Scripts\python -m pytest
-```
-
-To run with verbose output:
-```bash
 .venv\Scripts\python -m pytest -v
 ```
 
-### Test Coverage
-
-| Test | Description |
-|------|-------------|
-| `test_successful_linkedin_publishing_publish_post` | LinkedIn publish success (immediate after approval) |
-| `test_successful_linkedin_publishing_execute_job` | LinkedIn publish success (scheduled job after approval) |
-| `test_linkedin_publishing_401_unauthorized` | LinkedIn invalid/expired token (401) |
-| `test_linkedin_publishing_403_forbidden` | LinkedIn permission denied (403) |
-| `test_router_behavior_when_tool_fails` | Router handles tool errors gracefully |
-| `test_instagram_publish_success` | Instagram publish success (immediate after approval) |
-| `test_instagram_invalid_token` | Instagram invalid token (code 190) |
-| `test_instagram_permission_denied` | Instagram permission denied (code 10) |
-| `test_instagram_publish_success_via_execute_job` | Instagram publish success (scheduled job after approval) |
-| `test_publish_to_instagram_tool_success` | `instagram_publish_tool` ADK FunctionTool wrapper success |
-| `test_unsupported_platform_returns_validation_error` | Unsupported platform returns clean error |
-| `test_unsupported_platform_execute_job_returns_error` | Unsupported platform in execute_job fails cleanly |
-| `test_rate_limit_returns_429` | Rate limiter returns HTTP 429 when limit exceeded |
-| `test_pending_review_blocks_publishing` | Verify jobs in `pending_review` block publishing |
-| `test_approve_allows_publishing` | Verify approved jobs execute successfully |
-| `test_reject_blocks_publishing` | Verify rejected jobs block execution |
-| `test_edit_updates_content_before_publishing` | Verify editing updates job content and approves it |
-| `test_invalid_review_action` | Verify review endpoint validates actions |
-| `test_reviewing_published_job_returns_validation_error` | Verify already published jobs cannot be reviewed again |
-
----
-
-## 👥 Human Content Approval Workflow
-
-All AI-generated social media posts automatically enter a `pending_review` state. Posts cannot be published until a human approves or edits them.
-
-### Workflow Diagram
-
-```mermaid
-graph TD
-    A[AI Generates Content] --> B[Save in SQLite status='pending_review']
-    B --> C{Human Review /review/job_id}
-    C -->|Approve| D[Status: approved]
-    C -->|Reject| E[Status: rejected]
-    C -->|Edit| F[Replace content & Status: approved]
-    D --> G[execute_job allowed to publish]
-    F --> G
-    E --> H[execute_job blocked]
-```
-
-### Review API Examples
-
-#### 1. Approve a Post
-`POST /review/{job_id}`
-Request:
-```json
-{
-  "action": "approve",
-  "reviewer": "Alice"
-}
-```
-Response:
-```json
-{
-  "success": true,
-  "message": "Job successfully updated with action 'approve'.",
-  "job": {
-    "job_id": "9e1028b1-c4e1-4527-8def-5a5bdcc71b20",
-    "status": "approved",
-    "reviewer": "Alice",
-    "review_action": "approve",
-    "reviewed_at": "2026-07-17T06:50:00"
-  }
-}
-```
-
-#### 2. Reject a Post
-`POST /review/{job_id}`
-Request:
-```json
-{
-  "action": "reject",
-  "reviewer": "Bob"
-}
-```
-
-#### 3. Edit Content and Approve
-`POST /review/{job_id}`
-Request:
-```json
-{
-  "action": "edit",
-  "content": "Updated content after human review.",
-  "reviewer": "Charlie"
-}
-```
-
----
-
-## 🔗 API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/chat` | Primary conversational agent endpoint (rate limited: 20/min) |
-| `POST` | `/review/{job_id}` | Review/approve/reject/edit pending social posts |
-| `GET` | `/health` | Health check |
-| `GET` | `/linkedin/login` | Initiate LinkedIn OAuth flow |
-| `GET` | `/linkedin/callback` | LinkedIn OAuth callback & token exchange |
-| `GET` | `/docs` | Swagger UI (OpenAPI) |
-
+All 21 integration and unit tests currently pass, fully validating the rate limiters, publishing queues, the LLM router, and the human approval workflow.

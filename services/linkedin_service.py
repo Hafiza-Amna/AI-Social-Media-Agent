@@ -69,13 +69,15 @@ class LinkedInService:
         return f"urn:li:person:{person_id}"
 
 
-    def publish_text_post(self, content: str) -> str:
+    def publish_text_post(self, content: str) -> dict:
         """
         Publishes a text post to LinkedIn on behalf of the member.
-        Returns the publication URN (ID) on success.
+        Returns a dict with 'urn' and 'url' on success.
         """
         author_urn = self.get_member_urn()
         logger.info(f"[LinkedIn] Resolved Author URN: {author_urn}")
+        # Log to verify author URN belongs to logged-in user (as per user request)
+        logger.info(f"[LinkedIn] Author URN used in payload: {author_urn}")
 
         headers = {
             "Authorization": f"Bearer {self.access_token}",
@@ -103,6 +105,7 @@ class LinkedInService:
         logger.info(f"[LinkedIn] POST {url} — content length: {len(content)} chars")
         response = requests.post(url, headers=headers, json=payload)
         logger.info(f"[LinkedIn] Response status: {response.status_code}")
+        logger.info(f"[LinkedIn] Complete Response Body: {response.text}")
 
         if response.status_code not in (200, 201):
             logger.error(f"[LinkedIn] Failed to publish: {response.status_code} - {response.text}")
@@ -119,9 +122,16 @@ class LinkedInService:
         ugc_urn = data.get("id")
         if not ugc_urn:
             logger.warning("LinkedIn response did not contain an 'id' field, returning default URN.")
-            return f"urn:li:share:unknown_{response.status_code}"
+            ugc_urn = f"urn:li:share:unknown_{response.status_code}"
             
-        return ugc_urn
+        logger.info(f"[LinkedIn] Exact UGC Post URN returned: {ugc_urn}")
+        
+        # Construct public URL based on the URN
+        # e.g. "urn:li:share:123456789" -> "https://www.linkedin.com/feed/update/urn:li:share:123456789/"
+        public_url = f"https://www.linkedin.com/feed/update/{ugc_urn}/"
+        logger.info(f"[LinkedIn] Constructed public post URL: {public_url}")
+            
+        return {"urn": ugc_urn, "url": public_url}
 
     @staticmethod
     def update_env_token(token: str) -> None:
@@ -171,10 +181,11 @@ def publish_to_linkedin(content: str) -> dict:
     """
     try:
         service = LinkedInService()
-        urn = service.publish_text_post(content)
+        result = service.publish_text_post(content)
         return {
             "success": True,
-            "publication_id": urn,
+            "publication_id": result["urn"],
+            "publication_url": result["url"],
             "message": "Successfully published post to LinkedIn."
         }
     except Exception as e:
@@ -182,6 +193,7 @@ def publish_to_linkedin(content: str) -> dict:
         return {
             "success": False,
             "publication_id": None,
+            "publication_url": None,
             "message": f"Failed to publish to LinkedIn: {str(e)}"
         }
 

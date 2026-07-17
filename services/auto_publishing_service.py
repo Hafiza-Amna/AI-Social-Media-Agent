@@ -148,7 +148,9 @@ class AutoPublishingService:
                 logger.info("Executing real publishing to LinkedIn API via execute_job...")
                 from services.linkedin_service import LinkedInService
                 linkedin_service = LinkedInService()
-                publication_id = linkedin_service.publish_text_post(job.content)
+                publication_result = linkedin_service.publish_text_post(job.content)
+                publication_id = publication_result.get("urn")
+                publication_url = publication_result.get("url")
                 
                 job.status = PublishStatus.PUBLISHED.value
                 job.error_message = None
@@ -162,7 +164,8 @@ class AutoPublishingService:
                     publishing_status="Success",
                     platform=job.platform,
                     scheduled_time=job.scheduled_datetime,
-                    publication_id=publication_id
+                    publication_id=publication_id,
+                    publication_url=publication_url
                 )
 
             elif platform_lower == "instagram":

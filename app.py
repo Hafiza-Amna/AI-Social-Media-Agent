@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 # Request / Response Schemas
 # ─────────────────────────────────────────────────────────────────────────────
 
+from typing import Optional
+
 class ChatRequest(BaseModel):
     """Payload accepted by the POST /chat endpoint."""
     message: str = Field(..., min_length=1, description="The user's natural language message.")
@@ -43,6 +45,9 @@ class ChatResponse(BaseModel):
     message: str
     response: str
     status: str = "success"
+    job_id: Optional[str] = None
+    pending_review: bool = False
+    platform: Optional[str] = None
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Application Lifespan — initializes singletons on startup
@@ -56,6 +61,10 @@ async def lifespan(app: FastAPI):
     once at startup and stores it in app.state for use across all requests.
     """
     logger.info("Starting AI Social Media Agent API...")
+    # Ensure publish_jobs table exists before any request is handled
+    from database import init_db
+    init_db()
+    logger.info("Database tables verified/created.")
     app.state.router = AIIntentRouter()
     logger.info("Master Agent, Runner, and SessionService initialized successfully.")
     yield
@@ -144,10 +153,35 @@ async def chat(request: Request, body: ChatRequest):
         user_id=body.user_id
     )
 
+    # The router returns a JSON string when a publish tool runs (contains job_id)
+    import json as _json
+    job_id: Optional[str] = None
+    pending_review: bool = False
+    platform_out: Optional[str] = None
+    response_text: str
+
+    if isinstance(agent_response, str):
+        try:
+            parsed = _json.loads(agent_response)
+            if isinstance(parsed, dict) and "job_id" in parsed:
+                job_id = parsed.get("job_id")
+                response_text = parsed.get("response", agent_response)
+                pending_review = parsed.get("status") == "pending_review"
+                platform_out = parsed.get("platform")
+            else:
+                response_text = agent_response
+        except (_json.JSONDecodeError, TypeError):
+            response_text = agent_response
+    else:
+        response_text = str(agent_response)
+
     return ChatResponse(
         user_id=body.user_id,
         message=body.message,
-        response=agent_response
+        response=response_text,
+        job_id=job_id,
+        pending_review=pending_review,
+        platform=platform_out,
     )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -281,12 +315,49 @@ def linkedin_callback(request: Request, code: str = None, state: str = None, err
         )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Review Endpoint
+# Publishing Management Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
-from typing import Optional
 from datetime import datetime
 from models.publish_job import PublishJob, PublishStatus
 from database import SessionLocal
+from services.auto_publishing_service import AutoPublishingService
+
+_auto_service = AutoPublishingService()
+
+
+@app.get("/jobs", tags=["Publishing"])
+def list_jobs(status: Optional[str] = None):
+    """
+    List all publishing jobs in the queue.
+    Optionally filter by status: pending_review, approved, rejected, published, failed.
+    """
+    db = SessionLocal()
+    try:
+        query = db.query(PublishJob)
+        if status:
+            query = query.filter(PublishJob.status == status)
+        jobs = query.order_by(PublishJob.scheduled_datetime.desc()).all()
+        return {"jobs": [j.to_dict() for j in jobs], "total": len(jobs)}
+    finally:
+        db.close()
+
+
+@app.post("/execute_job/{job_id}", tags=["Publishing"])
+def execute_job(job_id: str):
+    """
+    Manually trigger the publishing of an approved job.
+    The job must have status='approved' for this to succeed.
+    """
+    result = _auto_service.execute_job(job_id)
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.message)
+    return {
+        "success": True, 
+        "message": result.message, 
+        "job": result.job,
+        "publication_id": result.publication_id,
+        "publication_url": getattr(result, "publication_url", None)
+    }
 
 class ReviewRequest(BaseModel):
     action: str = Field(..., description="The action to perform: 'approve', 'reject', or 'edit'.")
@@ -339,10 +410,24 @@ def review_job(job_id: str, body: ReviewRequest):
 
         db.commit()
         db.refresh(job)
+        saved_job = job.to_dict()
+
+        # Auto-publish immediately when approved or edited+approved
+        if action_lower in ("approve", "edit"):
+            publish_result = _auto_service.execute_job(job_id)
+            return {
+                "success": publish_result.success,
+                "message": publish_result.message,
+                "review_action": action_lower,
+                "job": publish_result.job or saved_job,
+                "publication_id": publish_result.publication_id,
+                "publication_url": getattr(publish_result, "publication_url", None)
+            }
+
         return {
             "success": True,
             "message": f"Job successfully updated with action '{action_lower}'.",
-            "job": job.to_dict()
+            "job": saved_job,
         }
     finally:
         db.close()
