@@ -281,6 +281,73 @@ def linkedin_callback(request: Request, code: str = None, state: str = None, err
         )
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Review Endpoint
+# ─────────────────────────────────────────────────────────────────────────────
+from typing import Optional
+from datetime import datetime
+from models.publish_job import PublishJob, PublishStatus
+from database import SessionLocal
+
+class ReviewRequest(BaseModel):
+    action: str = Field(..., description="The action to perform: 'approve', 'reject', or 'edit'.")
+    content: Optional[str] = Field(None, description="The updated content if action is 'edit'.")
+    reviewer: Optional[str] = Field("Human Reviewer", description="The identity of the reviewer.")
+
+@app.post("/review/{job_id}", tags=["Review"])
+def review_job(job_id: str, body: ReviewRequest):
+    """
+    Review a pending publishing job.
+    Supported actions: approve, reject, edit.
+    """
+    db = SessionLocal()
+    try:
+        job = db.query(PublishJob).filter(PublishJob.job_id == job_id).first()
+        if not job:
+            raise HTTPException(status_code=404, detail="Job ID not found in the database.")
+
+        # Validation: already published posts cannot be reviewed again
+        if job.status in [PublishStatus.PUBLISHED.value, "Published", "published"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Validation Error: Already published posts cannot be reviewed again."
+            )
+
+        action_lower = body.action.lower().strip()
+        if action_lower not in ["approve", "reject", "edit"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Validation Error: Invalid review action '{body.action}'. Supported actions: approve, reject, edit."
+            )
+
+        if action_lower == "edit":
+            if not body.content or not body.content.strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail="Validation Error: Content cannot be empty for 'edit' action."
+                )
+            job.content = body.content
+            job.status = PublishStatus.APPROVED.value
+        elif action_lower == "approve":
+            job.status = PublishStatus.APPROVED.value
+        elif action_lower == "reject":
+            job.status = PublishStatus.REJECTED.value
+
+        # Store review metadata
+        job.reviewer = body.reviewer
+        job.reviewed_at = datetime.utcnow()
+        job.review_action = action_lower
+
+        db.commit()
+        db.refresh(job)
+        return {
+            "success": True,
+            "message": f"Job successfully updated with action '{action_lower}'.",
+            "job": job.to_dict()
+        }
+    finally:
+        db.close()
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Application Entry Point
 # ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":

@@ -249,31 +249,104 @@ The server will start running at `http://127.0.0.1:8000`.
 Ensure your virtual environment is active and run `pytest` to execute all unit tests:
 
 ```bash
-pytest
+.venv\Scripts\python -m pytest
 ```
 
 To run with verbose output:
 ```bash
-pytest -v
+.venv\Scripts\python -m pytest -v
 ```
 
 ### Test Coverage
 
 | Test | Description |
 |------|-------------|
-| `test_successful_linkedin_publishing_publish_post` | LinkedIn publish success (immediate) |
-| `test_successful_linkedin_publishing_execute_job` | LinkedIn publish success (scheduled job) |
+| `test_successful_linkedin_publishing_publish_post` | LinkedIn publish success (immediate after approval) |
+| `test_successful_linkedin_publishing_execute_job` | LinkedIn publish success (scheduled job after approval) |
 | `test_linkedin_publishing_401_unauthorized` | LinkedIn invalid/expired token (401) |
 | `test_linkedin_publishing_403_forbidden` | LinkedIn permission denied (403) |
 | `test_router_behavior_when_tool_fails` | Router handles tool errors gracefully |
-| `test_instagram_publish_success` | Instagram publish success (immediate) |
+| `test_instagram_publish_success` | Instagram publish success (immediate after approval) |
 | `test_instagram_invalid_token` | Instagram invalid token (code 190) |
 | `test_instagram_permission_denied` | Instagram permission denied (code 10) |
-| `test_instagram_publish_success_via_execute_job` | Instagram publish success (scheduled job) |
+| `test_instagram_publish_success_via_execute_job` | Instagram publish success (scheduled job after approval) |
 | `test_publish_to_instagram_tool_success` | `instagram_publish_tool` ADK FunctionTool wrapper success |
 | `test_unsupported_platform_returns_validation_error` | Unsupported platform returns clean error |
 | `test_unsupported_platform_execute_job_returns_error` | Unsupported platform in execute_job fails cleanly |
 | `test_rate_limit_returns_429` | Rate limiter returns HTTP 429 when limit exceeded |
+| `test_pending_review_blocks_publishing` | Verify jobs in `pending_review` block publishing |
+| `test_approve_allows_publishing` | Verify approved jobs execute successfully |
+| `test_reject_blocks_publishing` | Verify rejected jobs block execution |
+| `test_edit_updates_content_before_publishing` | Verify editing updates job content and approves it |
+| `test_invalid_review_action` | Verify review endpoint validates actions |
+| `test_reviewing_published_job_returns_validation_error` | Verify already published jobs cannot be reviewed again |
+
+---
+
+## 👥 Human Content Approval Workflow
+
+All AI-generated social media posts automatically enter a `pending_review` state. Posts cannot be published until a human approves or edits them.
+
+### Workflow Diagram
+
+```mermaid
+graph TD
+    A[AI Generates Content] --> B[Save in SQLite status='pending_review']
+    B --> C{Human Review /review/job_id}
+    C -->|Approve| D[Status: approved]
+    C -->|Reject| E[Status: rejected]
+    C -->|Edit| F[Replace content & Status: approved]
+    D --> G[execute_job allowed to publish]
+    F --> G
+    E --> H[execute_job blocked]
+```
+
+### Review API Examples
+
+#### 1. Approve a Post
+`POST /review/{job_id}`
+Request:
+```json
+{
+  "action": "approve",
+  "reviewer": "Alice"
+}
+```
+Response:
+```json
+{
+  "success": true,
+  "message": "Job successfully updated with action 'approve'.",
+  "job": {
+    "job_id": "9e1028b1-c4e1-4527-8def-5a5bdcc71b20",
+    "status": "approved",
+    "reviewer": "Alice",
+    "review_action": "approve",
+    "reviewed_at": "2026-07-17T06:50:00"
+  }
+}
+```
+
+#### 2. Reject a Post
+`POST /review/{job_id}`
+Request:
+```json
+{
+  "action": "reject",
+  "reviewer": "Bob"
+}
+```
+
+#### 3. Edit Content and Approve
+`POST /review/{job_id}`
+Request:
+```json
+{
+  "action": "edit",
+  "content": "Updated content after human review.",
+  "reviewer": "Charlie"
+}
+```
 
 ---
 
@@ -282,57 +355,9 @@ pytest -v
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/chat` | Primary conversational agent endpoint (rate limited: 20/min) |
+| `POST` | `/review/{job_id}` | Review/approve/reject/edit pending social posts |
 | `GET` | `/health` | Health check |
 | `GET` | `/linkedin/login` | Initiate LinkedIn OAuth flow |
 | `GET` | `/linkedin/callback` | LinkedIn OAuth callback & token exchange |
 | `GET` | `/docs` | Swagger UI (OpenAPI) |
 
----
-
-## 🧪 Testing the Live LinkedIn Publisher
-
-### Option A: Using the `/chat` Orchestrator (Orchestrated Flow)
-The master agent will automatically invoke the publishing tool if the intent is recognized:
-1. Navigate to `http://127.0.0.1:8000/docs` in your browser.
-2. Under the **Agent** tag, click `POST /chat` -> **Try it out**.
-3. Submit the following message:
-   ```json
-   {
-     "message": "Publish a post to LinkedIn saying: Testing my new AI Social Media Agent database-backed publisher!"
-   }
-   ```
-4. Click **Execute**. The AI Agent will recognize your intent to publish, execute the tool, and reply with the success status.
-
-### Option B: Direct API Execution (Job Queues)
-Call the `AutoPublishingService` methods programmatically or use the tool integrations.
-
-#### Example Request Payload for `publish_post` tool (LinkedIn):
-```json
-{
-  "platform": "LinkedIn",
-  "scheduled_datetime": "2026-07-14T12:00:00",
-  "content": "Building an automated social posting scheduler with FastAPI, SQLite, and LinkedIn API!",
-  "media_urls": []
-}
-```
-
-#### Example Request Payload for `publish_post` tool (Instagram):
-```json
-{
-  "platform": "Instagram",
-  "scheduled_datetime": "2026-07-14T12:00:00",
-  "content": "Check out our latest AI product update! #AI #SocialMedia",
-  "media_urls": ["https://example.com/your-image.jpg"]
-}
-```
-
-#### Expected Successful API Response:
-```json
-{
-  "publishing_status": "Success",
-  "platform": "LinkedIn",
-  "scheduled_time": "2026-07-14T12:00:00",
-  "message": "Successfully published post to LinkedIn.",
-  "publication_id": "urn:li:share:87364810294371"
-}
-```

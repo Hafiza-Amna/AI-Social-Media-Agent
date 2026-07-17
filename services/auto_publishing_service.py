@@ -37,7 +37,7 @@ class AutoPublishingService:
             account_id=getattr(request, "account_id", "default_account"),
             scheduled_datetime=scheduled_dt,
             content=request.content,
-            status=PublishStatus.SCHEDULED.value
+            status=PublishStatus.PENDING_REVIEW.value
         )
         new_job.media_placeholders = getattr(request, "media_placeholders", getattr(request, "media_urls", []))
         
@@ -128,10 +128,10 @@ class AutoPublishingService:
             if not job:
                 raise ValueError("Job ID not found in the database.")
                 
-            if job.status != PublishStatus.SCHEDULED.value:
+            if job.status != PublishStatus.APPROVED.value:
                 return PublishResponse(
                     success=False,
-                    message=f"Job is not in a valid state to publish. Current state: {job.status}.",
+                    message=f"Job is not in a valid state to publish. Post is waiting for human approval. Current state: {job.status}.",
                     job=job.to_dict()
                 )
                 
@@ -241,8 +241,8 @@ class AutoPublishingService:
 
     def publish_post(self, request: PublishRequest) -> PublishResponse:
         """
-        Validates the publishing request and simulates the API posting process immediately,
-        or performs a real publish for LinkedIn.
+        Validates the publishing request and saves it to SQLite database with status="pending_review".
+        Do NOT publish automatically.
         """
         try:
             scheduled_dt = datetime.fromisoformat(request.scheduled_datetime)
@@ -253,6 +253,7 @@ class AutoPublishingService:
         # 1. Validation Phase
         if not request.content or request.content.strip() == "":
             return PublishResponse(
+                success=False,
                 publishing_status="Failed",
                 platform=request.platform,
                 scheduled_time=scheduled_dt,
@@ -260,99 +261,44 @@ class AutoPublishingService:
                 publication_id=None
             )
 
-        if scheduled_dt < datetime.utcnow():
-            logger.warning("Scheduled time is in the past. Executing immediately as a catch-up post.")
-
-        # 2. Execution Phase
         platform_lower = request.platform.lower().strip()
-        
-        if platform_lower == "linkedin":
-            from config import settings
-            if not settings.LINKEDIN_ACCESS_TOKEN:
-                logger.error("LinkedIn access token is missing in configuration.")
-                return PublishResponse(
-                    publishing_status="Failed",
-                    platform=request.platform,
-                    scheduled_time=scheduled_dt,
-                    message="Configuration Error: LINKEDIN_ACCESS_TOKEN is missing or empty in your environment/settings.",
-                    publication_id=None
-                )
-            
-            try:
-                logger.info("Executing real publishing to LinkedIn API...")
-                from services.linkedin_service import LinkedInService
-                linkedin_service = LinkedInService()
-                publication_id = linkedin_service.publish_text_post(request.content)
-                
-                return PublishResponse(
-                    publishing_status="Success",
-                    platform=request.platform,
-                    scheduled_time=scheduled_dt,
-                    message="Successfully published post to LinkedIn.",
-                    publication_id=publication_id
-                )
-            except Exception as e:
-                logger.error(f"Failed to publish to LinkedIn: {e}", exc_info=True)
-                return PublishResponse(
-                    publishing_status="Failed",
-                    platform=request.platform,
-                    scheduled_time=scheduled_dt,
-                    message=f"LinkedIn Publishing Error: {str(e)}",
-                    publication_id=None
-                )
-
-        elif platform_lower == "instagram":
-            from config import settings
-            if not settings.IG_ACCESS_TOKEN:
-                return PublishResponse(
-                    publishing_status="Failed",
-                    platform=request.platform,
-                    scheduled_time=scheduled_dt,
-                    message="Configuration Error: IG_ACCESS_TOKEN is missing or empty in your environment/settings.",
-                    publication_id=None
-                )
-            if not settings.IG_BUSINESS_ACCOUNT_ID:
-                return PublishResponse(
-                    publishing_status="Failed",
-                    platform=request.platform,
-                    scheduled_time=scheduled_dt,
-                    message="Configuration Error: IG_BUSINESS_ACCOUNT_ID is missing or empty in your environment/settings.",
-                    publication_id=None
-                )
-
-            media_urls = getattr(request, "media_urls", []) or []
-            media_url = media_urls[0] if media_urls else None
-
-            try:
-                logger.info("Executing real publishing to Instagram Graph API...")
-                from services.instagram_service import InstagramService
-                instagram_service = InstagramService()
-                publication_id = instagram_service.publish_instagram_post(request.content, media_url)
-
-                return PublishResponse(
-                    publishing_status="Success",
-                    platform=request.platform,
-                    scheduled_time=scheduled_dt,
-                    message="Successfully published post to Instagram.",
-                    publication_id=publication_id
-                )
-            except Exception as e:
-                logger.error(f"Failed to publish to Instagram: {e}", exc_info=True)
-                return PublishResponse(
-                    publishing_status="Failed",
-                    platform=request.platform,
-                    scheduled_time=scheduled_dt,
-                    message=f"Instagram Publishing Error: {str(e)}",
-                    publication_id=None
-                )
-
-        else:
-            # Unsupported platform — return clean validation error
-            logger.warning(f"Unsupported platform requested: {request.platform}")
+        if platform_lower not in ["linkedin", "instagram"]:
             return PublishResponse(
+                success=False,
                 publishing_status="Failed",
                 platform=request.platform,
                 scheduled_time=scheduled_dt,
                 message=f"Validation Error: Platform '{request.platform}' is not supported. Supported platforms: LinkedIn, Instagram.",
                 publication_id=None
             )
+
+        job_id = str(uuid.uuid4())
+        
+        new_job = PublishJob(
+            job_id=job_id,
+            platform=request.platform,
+            account_id=getattr(request, "account_id", "default_account"),
+            scheduled_datetime=scheduled_dt,
+            content=request.content,
+            status=PublishStatus.PENDING_REVIEW.value
+        )
+        new_job.media_placeholders = getattr(request, "media_placeholders", getattr(request, "media_urls", []))
+        
+        db = SessionLocal()
+        try:
+            db.add(new_job)
+            db.commit()
+            db.refresh(new_job)
+            job_dict = new_job.to_dict()
+        finally:
+            db.close()
+            
+        return PublishResponse(
+            success=True,
+            message="Post successfully generated and queued for human approval.",
+            job=job_dict,
+            publishing_status="pending_review",
+            platform=request.platform,
+            scheduled_time=scheduled_dt,
+            publication_id=None
+        )

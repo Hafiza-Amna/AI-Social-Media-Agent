@@ -9,9 +9,12 @@ class PublishStatus(str, Enum):
     """
     PENDING = "Pending"       # Currently in the process of being sent to the API
     SCHEDULED = "Scheduled"   # Waiting for its optimal time to be published
-    PUBLISHED = "Published"   # Successfully sent to the social network
+    PUBLISHED = "published"   # Successfully sent to the social network
     FAILED = "Failed"         # Encountered an error during publishing
     CANCELLED = "Cancelled"   # Aborted by the user
+    PENDING_REVIEW = "pending_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
 
 class PublishJob(Base):
     """
@@ -25,9 +28,14 @@ class PublishJob(Base):
     scheduled_datetime = Column(DateTime, nullable=False)
     content = Column(String, nullable=False)
     media_placeholders_json = Column(String, default="[]")
-    status = Column(String, default="Scheduled")
+    status = Column(String, default="pending_review")
     retry_count = Column(Integer, default=0)
     error_message = Column(String, nullable=True)
+
+    # Human approval fields
+    reviewer = Column(String, nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    review_action = Column(String, nullable=True)
 
     @property
     def media_placeholders(self):
@@ -50,5 +58,8 @@ class PublishJob(Base):
             "media_placeholders": self.media_placeholders,
             "status": self.status,
             "retry_count": self.retry_count,
-            "error_message": self.error_message
+            "error_message": self.error_message,
+            "reviewer": self.reviewer,
+            "reviewed_at": self.reviewed_at,
+            "review_action": self.review_action
         }
