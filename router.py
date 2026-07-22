@@ -127,7 +127,33 @@ class AIIntentRouter:
 
                     logger.info(f"[Router] Executing tool '{fn_name}' | args={fn_args[:200]}")
 
-                    tool_result_content = self._execute_tool(fn_name, fn_args)
+                    if fn_name == "publish_to_instagram_tool":
+                        import re
+                        urls = re.findall(r'(https?://[^\s"\'<>]+)', user_message)
+                        extracted_url = None
+                        for url in urls:
+                            url = url.rstrip('.,!?)(')
+                            if any(ext in url.lower() for ext in ['.jpg', '.jpeg', '.png', '.webp']):
+                                extracted_url = url
+                                break
+                        
+                        if extracted_url:
+                            logger.info(f"[Router] Extracted media URL from user message: {extracted_url}")
+                            try:
+                                args_dict = json.loads(fn_args)
+                                args_dict['media_url'] = extracted_url
+                                fn_args = json.dumps(args_dict)
+                            except Exception as e:
+                                logger.error(f"[Router] Error modifying fn_args for Instagram tool: {e}")
+                            tool_result_content = self._execute_tool(fn_name, fn_args)
+                        else:
+                            logger.warning("[Router] No valid image URL found in user message for Instagram publish.")
+                            tool_result_content = json.dumps({
+                                "success": False,
+                                "error": "Validation Error: No image URL (jpg, jpeg, png, webp) found in your message. Instagram requires a valid image URL."
+                            })
+                    else:
+                        tool_result_content = self._execute_tool(fn_name, fn_args)
 
                     # Capture publish tool results so we can return job_id
                     if fn_name in PUBLISH_TOOLS and _publish_result is None:

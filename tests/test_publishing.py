@@ -513,7 +513,7 @@ def test_edit_updates_content_before_publishing(mock_settings):
         mock_get_response.json.return_value = {"id": "test_member_id"}
         mock_get.return_value = mock_get_response
 
-        mock_publish.return_value = "urn:li:share:edited_12345"
+        mock_publish.return_value = {"urn": "urn:li:share:edited_12345", "url": "https://www.linkedin.com/feed/update/urn:li:share:edited_12345/"}
 
         resp = client.post(
             f"/review/{job_id}",
