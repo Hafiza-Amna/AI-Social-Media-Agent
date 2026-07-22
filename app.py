@@ -11,7 +11,9 @@ load_dotenv()  # Load GEMINI_API_KEY and all other env vars from .env before any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+import os
 from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -104,6 +106,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Mount Frontend Static Assets
+# ─────────────────────────────────────────────────────────────────────────────
+frontend_path = os.path.join(os.path.dirname(__file__), "frontend")
+if os.path.exists(frontend_path):
+    app.mount("/static", StaticFiles(directory=frontend_path), name="static")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Global Exception Handler
@@ -435,11 +444,16 @@ def review_job(job_id: str, body: ReviewRequest):
 # ─────────────────────────────────────────────────────────────────────────────
 # Application Entry Point
 # ─────────────────────────────────────────────────────────────────────────────
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
-@app.get("/")
+@app.get("/", tags=["Dashboard"])
+@app.get("/dashboard", tags=["Dashboard"])
 def home():
+    index_file = os.path.join(os.path.dirname(__file__), "frontend", "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
     return {
         "message": "AI Social Media Agent is running"
     }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)

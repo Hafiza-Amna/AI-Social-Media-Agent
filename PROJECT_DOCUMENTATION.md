@@ -104,8 +104,21 @@ The AI Social Media Agent follows a layered, decoupled service-oriented architec
 - **Pytest:** Automated testing framework.
 
 ### Frontend Technologies
-- **Swagger UI (Interactive API Docs):** Built-in FastAPI Swagger UI accessible at `/docs` for API testing and interactive workflow execution.
-- **HTML5 Success Pages:** Custom responsive HTML response pages rendered upon completing LinkedIn OAuth callbacks (`/linkedin/callback`).
+- **Single-Page Application (SPA):** Lightweight Vanilla HTML5, CSS3, and JavaScript ES6+ architecture for maximum maintainability and zero build overhead.
+- **SaaS Dark Theme Design System:** Professional slate-dark visual theme (`#0b0f17` background, glassmorphism surface cards, Inter/Outfit Google Fonts, status indicators, and modal dialogs).
+- **Remixicon CDN:** Iconography framework for social media platform badges and dashboard control elements.
+- **FastAPI StaticFiles Mounting:** Served directly at `http://127.0.0.1:8001/` or `http://127.0.0.1:8001/dashboard` via FastAPI `StaticFiles` and `FileResponse`.
+
+### Frontend Architecture & UI Sections
+The frontend is organized into 8 core functional modules:
+1. **Dashboard Overview (`dashboard.js`):** Real-time counters (Total, Pending, Scheduled, Published, Failed), platform health status, recent activity timeline, and quick action shortcuts.
+2. **AI Content Generator (`content.js`):** Form interface for selecting platform (LinkedIn/Instagram), content prompts, tone of voice, content types (Standard/AB Variants), and media URLs. Connects to `POST /chat`.
+3. **Content Approval Center (`approval.js`):** Human-in-the-Loop review hub displaying pending jobs, content text, created timestamps, and action buttons (`Approve & Publish`, `Reject`, `Edit`). Connects to `POST /review/{job_id}`.
+4. **Content Calendar (`calendar.js`):** Timeline view of scheduled posts grouped by date/time, platform badge, and status.
+5. **Social Media Connections (`connections.js`):** Status cards for LinkedIn OAuth 2.0 (`/linkedin/login`) and Instagram Graph API integrations.
+6. **Publishing Center (`publishing.js`):** Complete job queue management table with status filtering (All, Pending, Approved, Published, Failed) and manual execution triggers (`POST /execute_job/{job_id}`).
+7. **Analytics Dashboard (`analytics.js`):** Real database performance metrics (total jobs, published vs failed rates, platform distribution). Unmeasured metrics display "Data not available yet".
+8. **Settings & Health (`settings.js`):** Live API health monitoring (`GET /health`), active LLM model identification, rate limiter policies, and masked credential security indicators.
 
 ---
 

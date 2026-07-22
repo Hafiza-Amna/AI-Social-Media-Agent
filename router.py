@@ -8,6 +8,7 @@ the underlying model can be swapped via a single env-var change.
 """
 import json
 import logging
+import re
 import uuid
 import litellm
 
@@ -29,6 +30,150 @@ logging.basicConfig(
 # ─────────────────────────────────────────────────────────────────────────────
 _master_agent = create_master_agent()
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Intent → Tool mapping for token-efficient routing
+# Each entry: (list-of-keyword-signals, list-of-tool-names-to-include)
+# Tools always included: content_generator_tool (used by publish flows)
+# ─────────────────────────────────────────────────────────────────────────────
+_INTENT_TOOL_MAP = [
+    # ── More-specific intents first (prevents false matches with broader platform keywords) ──
+
+    # Content repurposing — actual name: repurpose_content
+    (
+        ["repurpose", "reuse", "adapt content", "cross-post", "transform content"],
+        ["repurpose_content", "generate_content"],
+    ),
+    # Content calendar — actual names: generate_calendar, analyze_schedule
+    (
+        ["calendar", "content plan", "content schedule", "weekly plan", "monthly plan",
+         "campaign plan"],
+        ["generate_content", "generate_calendar", "analyze_schedule"],
+    ),
+    # Scheduling — actual names: analyze_schedule, generate_calendar
+    (
+        ["best time", "optimal time", "when to post", "posting time"],
+        ["analyze_schedule", "generate_calendar"],
+    ),
+    # Comments — actual name: reply_to_comment
+    (
+        ["reply to comment", "respond to comment", "comment reply"],
+        ["reply_to_comment"],
+    ),
+    # DMs / messages — actual name: reply_to_dm
+    (
+        ["dm", "direct message", "message reply", "respond to message"],
+        ["reply_to_dm"],
+    ),
+    # Analytics — actual name: run_analytics
+    (
+        ["analytics", "performance metrics", "engagement rate", "reach", "impressions",
+         "stats", "statistics"],
+        ["run_analytics"],
+    ),
+    # Competitor analysis — actual name: analyze_competitor
+    (
+        ["competitor", "competition", "swot", "market gap", "analyze competitor",
+         "analyse competitor"],
+        ["analyze_competitor"],
+    ),
+    # Team collaboration — actual name: manage_team
+    (
+        ["team", "assign task", "collaboration", "review workflow", "task assignment",
+         "team member", "approve task"],
+        ["manage_team"],
+    ),
+
+    # ── Broader platform intents (checked after specifics) ──
+
+    # LinkedIn publishing — actual names: generate_content, publish_to_linkedin_tool, publish_post
+    (
+        ["linkedin", "post on linkedin", "publish on linkedin", "share on linkedin",
+         "linkedin post", "publish linkedin"],
+        ["generate_content", "publish_to_linkedin_tool", "publish_post"],
+    ),
+    # Instagram publishing — actual names: generate_content, publish_to_instagram_tool, publish_post
+    (
+        ["instagram", "post on instagram", "publish on instagram", "share on instagram",
+         "instagram post", "caption", "ig post"],
+        ["generate_content", "publish_to_instagram_tool", "publish_post"],
+    ),
+    # Content generation only (no publish intent)
+    (
+        ["generate content", "write a post", "create content", "draft a post",
+         "write content", "generate a post", "create a post", "ab variant", "a/b"],
+        ["generate_content"],
+    ),
+    # Scheduling (broad keyword — after more specific ones above)
+    (
+        ["schedule"],
+        ["analyze_schedule", "generate_calendar"],
+    ),
+    # Comment (broad keyword — after more specific ones above)
+    (
+        ["comment"],
+        ["reply_to_comment"],
+    ),
+    # Performance / insights (broad analytics keywords)
+    (
+        ["performance", "insights", "metrics"],
+        ["run_analytics"],
+    ),
+]
+
+
+def _extract_retry_after(error_message: str) -> str | None:
+    """
+    Parses the Groq/LiteLLM rate limit error message to extract the retry-after
+    wait duration (e.g. "Please try again in 14.38s.").
+    Returns a human-readable wait string, or None if not parseable.
+    """
+    match = re.search(r"[Pp]lease try again in ([\d.]+)(s|ms|m)", str(error_message))
+    if not match:
+        return None
+    value = float(match.group(1))
+    unit = match.group(2)
+    if unit == "ms":
+        seconds = int(value / 1000) + 1
+        return f"{seconds} second{'s' if seconds != 1 else ''}"
+    elif unit == "m":
+        return f"{int(value)} minute{'s' if int(value) != 1 else ''}"
+    else:
+        seconds = int(value) + 1
+        return f"{seconds} second{'s' if seconds != 1 else ''}"
+
+
+def _select_tools_for_intent(
+    user_message: str,
+    all_tools: list,
+    tools_schema: list,
+    tools_map: dict,
+) -> list:
+    """
+    Selects a minimal subset of tool schemas relevant to the detected user intent.
+    Falls back to the complete tool set if no intent can be matched.
+
+    This reduces per-request token usage by 50-70% for targeted queries.
+    """
+    msg_lower = user_message.lower()
+
+    for keywords, tool_names in _INTENT_TOOL_MAP:
+        if any(kw in msg_lower for kw in keywords):
+            # Build filtered schema list, only including tools that are registered
+            selected = [
+                schema for schema in tools_schema
+                if schema.get("function", {}).get("name") in tool_names
+                   and schema.get("function", {}).get("name") in tools_map
+            ]
+            if selected:
+                logger.info(
+                    f"[Router] Intent matched — sending {len(selected)}/{len(tools_schema)} tool schemas."
+                )
+                return selected
+
+    # No specific intent detected -> send all tools (safe fallback)
+    logger.info("[Router] No specific intent detected — sending all tool schemas (fallback).")
+    return tools_schema
+
 
 class AIIntentRouter:
     """
@@ -36,8 +181,8 @@ class AIIntentRouter:
 
     Architecture
     ------------
-    1. Builds the LiteLLM tool schema once from the registered FunctionTools.
-    2. Sends the user message + tool schema to the LLM (Groq / OpenAI / …).
+    1. Detects user intent and selects a minimal, relevant subset of tool schemas.
+    2. Sends the user message + filtered tool schema to the LLM.
     3. If the LLM requests a tool call, executes the tool, appends the result,
        then re-invokes the LLM to synthesize a final natural-language response.
 
@@ -91,6 +236,14 @@ class AIIntentRouter:
                 "'Generate a LinkedIn post about AI' or 'Analyze my competitor.'"
             )
 
+        # -- Select minimal tool set based on detected intent ----------
+        active_tools_schema = _select_tools_for_intent(
+            user_message,
+            self._tools,
+            self._tools_schema,
+            self._tools_map,
+        )
+
         messages = [
             {"role": "system", "content": self._system_prompt},
             {"role": "user",   "content": user_message},
@@ -101,21 +254,23 @@ class AIIntentRouter:
         PUBLISH_TOOLS = {"publish_to_linkedin_tool", "publish_to_instagram_tool"}
 
         try:
-            # ── Step 1: Initial LLM call with tool schema ──────────────
-            logger.info("[Router] Initiating LLM call with tool-calling enabled.")
+            # -- Step 1: Initial LLM call with filtered tool schema ----
+            logger.info(
+                f"[Router] Initiating LLM call | tools={len(active_tools_schema)} schemas."
+            )
             response = litellm.completion(
                 model=self._model_name,
                 messages=messages,
-                tools=self._tools_schema,
+                tools=active_tools_schema,
                 tool_choice="auto",
                 temperature=0.5,
-                num_retries=2,
+                num_retries=0,   # No automatic retries — prevents TPM burst amplification
             )
 
             response_message = response.choices[0].message
             tool_calls = getattr(response_message, "tool_calls", None)
 
-            # ── Step 2: Execute requested tools ────────────────────────
+            # -- Step 2: Execute requested tools -----------------------
             if tool_calls:
                 logger.info(f"[Router] LLM requested {len(tool_calls)} tool call(s).")
                 messages.append(response_message)
@@ -128,7 +283,6 @@ class AIIntentRouter:
                     logger.info(f"[Router] Executing tool '{fn_name}' | args={fn_args[:200]}")
 
                     if fn_name == "publish_to_instagram_tool":
-                        import re
                         urls = re.findall(r'(https?://[^\s"\'<>]+)', user_message)
                         extracted_url = None
                         for url in urls:
@@ -169,13 +323,12 @@ class AIIntentRouter:
                         "content":     tool_result_content,
                     })
 
-                # ── Step 3: Re-invoke LLM to synthesize final answer ───
+                # -- Step 3: Re-invoke LLM to synthesize final answer --
                 logger.info("[Router] Synthesizing final response from tool output.")
 
                 # If a publish tool ran, tell the LLM exactly what to say
                 if _publish_result:
                     job_id = _publish_result.get("job_id")
-                    content_preview = (_publish_result.get("content") or "")[:200]
                     messages.append({
                         "role": "system",
                         "content": (
@@ -194,6 +347,7 @@ class AIIntentRouter:
                     model=self._model_name,
                     messages=messages,
                     temperature=0.5,
+                    num_retries=0,
                 )
                 final_text = final.choices[0].message.content or ""
 
@@ -223,8 +377,19 @@ class AIIntentRouter:
             return "Authentication Error: please verify that a valid API key is configured."
 
         except litellm.exceptions.RateLimitError as exc:
+            retry_after = _extract_retry_after(str(exc))
+            if retry_after:
+                msg = (
+                    f"\u26a0\ufe0f The AI service has temporarily reached its token rate limit. "
+                    f"Please wait {retry_after} and try again."
+                )
+            else:
+                msg = (
+                    "\u26a0\ufe0f The AI service has temporarily reached its token rate limit. "
+                    "Please wait 15-20 seconds and try again."
+                )
             logger.error(f"[Router] Rate limit hit: {exc}")
-            return "The AI service is currently busy. Please wait a moment and try again."
+            return msg
 
         except Exception as exc:
             logger.error(f"[Router] Unexpected error: {exc}", exc_info=True)

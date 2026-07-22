@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Social Media Agent — Management Dashboard</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Remixicon CDN for sleek SaaS icons -->
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <!-- Dashboard CSS -->
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+  <div id="app-layout">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div>
+        <div class="sidebar-header">
+          <div class="logo-icon">
+            <i class="ri-robot-2-line"></i>
+          </div>
+          <div class="logo-text">
+            <span class="logo-title">Social Agent AI</span>
+            <span class="logo-subtitle">FeedHive Orchestrator</span>
+          </div>
+        </div>
+
+        <nav class="sidebar-nav">
+          <a class="nav-item active" data-tab="dashboard">
+            <i class="ri-dashboard-line"></i> Dashboard
+          </a>
+          <a class="nav-item" data-tab="content">
+            <i class="ri-magic-line"></i> AI Content Generator
+          </a>
+          <a class="nav-item" data-tab="approval">
+            <i class="ri-checkbox-circle-line"></i> Approval Center
+          </a>
+          <a class="nav-item" data-tab="calendar">
+            <i class="ri-calendar-event-line"></i> Content Calendar
+          </a>
+          <a class="nav-item" data-tab="connections">
+            <i class="ri-links-line"></i> Social Connections
+          </a>
+          <a class="nav-item" data-tab="publishing">
+            <i class="ri-send-plane-line"></i> Publishing Center
+          </a>
+          <a class="nav-item" data-tab="analytics">
+            <i class="ri-bar-chart-2-line"></i> Analytics
+          </a>
+          <a class="nav-item" data-tab="settings">
+            <i class="ri-settings-4-line"></i> Settings
+          </a>
+        </nav>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="agent-badge">
+          <div class="badge-dot"></div>
+          <div class="agent-info">
+            <span class="agent-name">Master Agent AI</span>
+            <span class="agent-model">LiteLLM + Groq / Gemini</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Wrapper -->
+    <div class="main-wrapper">
+      
+      <!-- Topbar Header -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="mobile-toggle" id="mobile-menu-toggle">
+            <i class="ri-menu-line"></i>
+          </button>
+          <h1 class="page-title" id="page-title-text">Dashboard Overview</h1>
+        </div>
+
+        <div class="topbar-right">
+          <div class="status-pill">
+            <span class="status-indicator online" id="header-status-indicator"></span>
+            <span id="header-status-text">API Operational</span>
+          </div>
+
+          <button class="btn btn-primary" onclick="window.app.switchTab('content')">
+            <i class="ri-add-line"></i> Generate Post
+          </button>
+        </div>
+      </header>
+
+      <!-- Content Body Views -->
+      <main class="content-body">
+        
+        <!-- SECTION 1: DASHBOARD -->
+        <section id="section-dashboard" class="view-section active">
+          <!-- Stat Cards Grid -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon blue"><i class="ri-article-line"></i></div>
+              <div class="stat-details">
+                <span class="stat-value" id="stat-total-posts">0</span>
+                <span class="stat-label">Total Posts</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon warning"><i class="ri-time-line"></i></div>
+              <div class="stat-details">
+                <span class="stat-value" id="stat-pending-posts">0</span>
+                <span class="stat-label">Pending Approval</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon info"><i class="ri-calendar-line"></i></div>
+              <div class="stat-details">
+                <span class="stat-value" id="stat-scheduled-posts">0</span>
+                <span class="stat-label">Scheduled</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon success"><i class="ri-checkbox-circle-line"></i></div>
+              <div class="stat-details">
+                <span class="stat-value" id="stat-published-posts">0</span>
+                <span class="stat-label">Published Live</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon danger"><i class="ri-error-warning-line"></i></div>
+              <div class="stat-details">
+                <span class="stat-value" id="stat-failed-posts">0</span>
+                <span class="stat-label">Failed Jobs</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2 Column Layout -->
+          <div class="grid-2col">
+            <!-- Recent Activity -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title"><i class="ri-history-line"></i> Recent Activity Stream</h3>
+                <button class="btn btn-sm btn-secondary" onclick="window.dashboardController.refreshData()">
+                  <i class="ri-refresh-line"></i> Refresh
+                </button>
+              </div>
+              <div id="recent-activity-list">
+                <div class="empty-state">
+                  <span class="spinner"></span>
+                  <p style="margin-top: 8px;">Loading activity...</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Platform Connections Status & Quick Actions -->
+            <div>
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title"><i class="ri-pulse-line"></i> Platform Health</h3>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 14px;">
+                  <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: var(--bg-input); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <i class="ri-linkedin-box-fill" style="color: #0a66c2; font-size: 24px;"></i>
+                      <div>
+                        <div style="font-weight: 600; font-size: 14px;">LinkedIn API</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">UGC Publishing</div>
+                      </div>
+                    </div>
+                    <span class="badge badge-published">Active</span>
+                  </div>
+
+                  <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: var(--bg-input); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <i class="ri-instagram-fill" style="color: #e1306c; font-size: 24px;"></i>
+                      <div>
+                        <div style="font-weight: 600; font-size: 14px;">Instagram Graph API</div>
+                        <div style="font-size: 11px; color: var(--text-muted);">Container Publishing</div>
+                      </div>
+                    </div>
+                    <span class="badge badge-published">Active</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Quick Actions -->
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title"><i class="ri-flashlight-line"></i> Quick Actions</h3>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                  <button class="btn btn-primary" onclick="window.app.switchTab('content')">
+                    <i class="ri-magic-line"></i> Generate New Post
+                  </button>
+                  <button class="btn btn-secondary" onclick="window.app.switchTab('approval')">
+                    <i class="ri-checkbox-circle-line"></i> Review Pending Posts
+                  </button>
+                  <button class="btn btn-secondary" onclick="window.app.switchTab('publishing')">
+                    <i class="ri-send-plane-line"></i> View Publishing Queue
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 2: AI CONTENT GENERATOR -->
+        <section id="section-content" class="view-section">
+          <div class="grid-2col">
+            <!-- Form Card -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title"><i class="ri-magic-line"></i> Generate Platform Post</h3>
+              </div>
+              <form id="content-gen-form">
+                <div class="form-group">
+                  <label class="form-label">Select Target Platform</label>
+                  <select class="form-select" id="gen-platform">
+                    <option value="LinkedIn">LinkedIn</option>
+                    <option value="Instagram">Instagram</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Topic / Content Prompt</label>
+                  <textarea class="form-control" id="gen-topic" placeholder="e.g. AI trends in software engineering and cloud computing" required></textarea>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Tone of Voice</label>
+                  <select class="form-select" id="gen-tone">
+                    <option value="Professional">Professional & Authoritative</option>
+                    <option value="Engaging">Engaging & Conversational</option>
+                    <option value="Educational">Educational & Insightful</option>
+                    <option value="Urgent">Urgent & Promotional</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Content Type</label>
+                  <select class="form-select" id="gen-type">
+                    <option value="standard">Standard Single Post</option>
+                    <option value="ab_variant">A/B Caption Variants</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Media URL (Required for Instagram)</label>
+                  <input type="text" class="form-control" id="gen-media-url" placeholder="https://example.com/photo.jpg" value="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800">
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%;" id="btn-generate-content">
+                  <i class="ri-sparkling-fill"></i> Generate & Queue for Review
+                </button>
+              </form>
+            </div>
+
+            <!-- Output Display Card -->
+            <div>
+              <div class="card" id="gen-output-card" style="display: none;">
+                <div class="card-header">
+                  <h3 class="card-title"><i class="ri-file-text-line"></i> Generated Result</h3>
+                  <div id="gen-output-meta"></div>
+                </div>
+
+                <div class="form-group">
+                  <textarea class="form-control" id="gen-output-text" style="min-height: 220px; font-family: monospace; font-size: 13px;" readonly></textarea>
+                </div>
+
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                  <button class="btn btn-secondary btn-sm" onclick="window.contentController.copyContent()">
+                    <i class="ri-file-copy-line"></i> Copy Text
+                  </button>
+                  <button class="btn btn-primary btn-sm" onclick="window.app.switchTab('approval')">
+                    <i class="ri-checkbox-circle-line"></i> Go to Approval Center
+                  </button>
+                </div>
+              </div>
+
+              <div class="card" style="background: rgba(59, 130, 246, 0.05); border-color: rgba(59, 130, 246, 0.2);">
+                <div class="card-title" style="color: var(--primary); margin-bottom: 10px;">
+                  <i class="ri-shield-check-line"></i> Governance Guarantee
+                </div>
+                <p style="font-size: 13px; color: var(--text-muted); line-height: 1.5;">
+                  All generated posts automatically enter the database under <code>pending_review</code> status. They are safely queued and will never be published to live social platforms until you explicitly approve them in the Approval Center.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 3: CONTENT APPROVAL CENTER -->
+        <section id="section-approval" class="view-section">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title"><i class="ri-checkbox-circle-line"></i> Human Content Approval Queue</h3>
+              <button class="btn btn-sm btn-secondary" onclick="window.approvalController.refreshData()">
+                <i class="ri-refresh-line"></i> Refresh Queue
+              </button>
+            </div>
+            <div id="approval-cards-container">
+              <!-- Dynamically rendered pending approval cards -->
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 4: CONTENT CALENDAR -->
+        <section id="section-calendar" class="view-section">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title"><i class="ri-calendar-event-line"></i> Content Calendar & Schedule Timeline</h3>
+              <button class="btn btn-sm btn-secondary" onclick="window.calendarController.refreshData()">
+                <i class="ri-refresh-line"></i> Refresh Schedule
+              </button>
+            </div>
+            <div id="calendar-posts-container">
+              <!-- Dynamically rendered schedule queue -->
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 5: SOCIAL CONNECTIONS -->
+        <section id="section-connections" class="view-section">
+          <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+            <!-- LinkedIn Card -->
+            <div class="card">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <i class="ri-linkedin-box-fill" style="color: #0a66c2; font-size: 36px;"></i>
+                  <div>
+                    <h3 style="font-size: 16px; font-weight: 700;">LinkedIn</h3>
+                    <span style="font-size: 12px; color: var(--text-muted);">UGC OAuth 2.0 Integration</span>
+                  </div>
+                </div>
+                <div id="conn-linkedin-status"></div>
+              </div>
+              <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5;">
+                Connect your personal profile or company page to publish text posts and share updates directly.
+              </p>
+              <button class="btn btn-primary" onclick="window.connectionsController.connectLinkedIn()">
+                <i class="ri-login-box-line"></i> Authenticate with LinkedIn OAuth
+              </button>
+            </div>
+
+            <!-- Instagram Card -->
+            <div class="card">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <i class="ri-instagram-fill" style="color: #e1306c; font-size: 36px;"></i>
+                  <div>
+                    <h3 style="font-size: 16px; font-weight: 700;">Instagram</h3>
+                    <span style="font-size: 12px; color: var(--text-muted);">Meta Graph API Container</span>
+                  </div>
+                </div>
+                <div id="conn-instagram-status"></div>
+              </div>
+              <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5;">
+                Connected via Instagram Business Account ID and Meta Graph API Token for container publishing.
+              </p>
+              <button class="btn btn-secondary" disabled>
+                <i class="ri-check-double-line"></i> Configured via Environment
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 6: PUBLISHING CENTER -->
+        <section id="section-publishing" class="view-section">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title"><i class="ri-send-plane-line"></i> Publishing Queue & Execution History</h3>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-sm btn-primary pub-filter-btn" id="filter-btn-all" onclick="window.publishingController.setFilter(null)">All</button>
+                <button class="btn btn-sm btn-secondary pub-filter-btn" id="filter-btn-pending_review" onclick="window.publishingController.setFilter('pending_review')">Pending</button>
+                <button class="btn btn-sm btn-secondary pub-filter-btn" id="filter-btn-approved" onclick="window.publishingController.setFilter('approved')">Approved</button>
+                <button class="btn btn-sm btn-secondary pub-filter-btn" id="filter-btn-published" onclick="window.publishingController.setFilter('published')">Published</button>
+                <button class="btn btn-sm btn-secondary pub-filter-btn" id="filter-btn-failed" onclick="window.publishingController.setFilter('failed')">Failed</button>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="custom-table">
+                <thead>
+                  <tr>
+                    <th>Job ID</th>
+                    <th>Platform</th>
+                    <th>Content Snippet</th>
+                    <th>Status</th>
+                    <th>Queued Date</th>
+                    <th>Action / URN</th>
+                  </tr>
+                </thead>
+                <tbody id="publishing-queue-tbody">
+                  <!-- Dynamically rendered rows -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 7: ANALYTICS -->
+        <section id="section-analytics" class="view-section">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon blue"><i class="ri-file-list-3-line"></i></div>
+              <div class="stat-details">
+                <span class="stat-value" id="analytics-total-posts">0</span>
+                <span class="stat-label">Total Jobs Processed</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon success"><i class="ri-check-double-line"></i></div>
+              <div class="stat-details">
+                <span class="stat-value" id="analytics-published-posts">0</span>
+                <span class="stat-label">Successfully Published</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon warning"><i class="ri-loader-4-line"></i></div>
+              <div class="stat-details">
+                <span class="stat-value" id="analytics-pending-posts">0</span>
+                <span class="stat-label">Pending Review</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon danger"><i class="ri-error-warning-line"></i></div>
+              <div class="stat-details">
+                <span class="stat-value" id="analytics-failed-posts">0</span>
+                <span class="stat-label">Publishing Failures</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-2col">
+            <!-- Real Platform Breakdown Card -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title"><i class="ri-pie-chart-line"></i> Platform Distribution</h3>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 16px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px; background: var(--bg-input); border-radius: var(--radius-md);">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <i class="ri-linkedin-box-fill" style="color: #0a66c2; font-size: 24px;"></i>
+                    <span style="font-weight: 600;">LinkedIn Posts</span>
+                  </div>
+                  <span id="analytics-linkedin-count" style="font-weight: 700; color: var(--primary);">0 posts</span>
+                </div>
+
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px; background: var(--bg-input); border-radius: var(--radius-md);">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <i class="ri-instagram-fill" style="color: #e1306c; font-size: 24px;"></i>
+                    <span style="font-weight: 600;">Instagram Posts</span>
+                  </div>
+                  <span id="analytics-instagram-count" style="font-weight: 700; color: var(--accent-pink);">0 posts</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Uncollected Metrics Cards -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title"><i class="ri-line-chart-line"></i> External Metrics</h3>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 14px;">
+                <div style="padding: 16px; background: var(--bg-input); border-radius: var(--radius-md); border: 1px dashed var(--border-color); text-align: center;">
+                  <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px;">Click-Through Rate (CTR)</div>
+                  <div style="font-size: 14px; font-weight: 700; color: var(--text-dim);">Data not available yet</div>
+                </div>
+
+                <div style="padding: 16px; background: var(--bg-input); border-radius: var(--radius-md); border: 1px dashed var(--border-color); text-align: center;">
+                  <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px;">Follower Growth Rate</div>
+                  <div style="font-size: 14px; font-weight: 700; color: var(--text-dim);">Data not available yet</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION 8: SETTINGS -->
+        <section id="section-settings" class="view-section">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title"><i class="ri-settings-4-line"></i> System Settings & Configuration</h3>
+              <button class="btn btn-sm btn-secondary" onclick="window.settingsController.refreshData()">
+                <i class="ri-refresh-line"></i> Refresh Status
+              </button>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px; background: var(--bg-input); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div>
+                  <div style="font-weight: 600; font-size: 14px;">API Server Status</div>
+                  <div style="font-size: 12px; color: var(--text-muted);">FastAPI ASGI Uvicorn Engine</div>
+                </div>
+                <div id="settings-api-status"></div>
+              </div>
+
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px; background: var(--bg-input); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div>
+                  <div style="font-weight: 600; font-size: 14px;">Active LLM Model</div>
+                  <div style="font-size: 12px; color: var(--text-muted);">LiteLLM Unified Gateway</div>
+                </div>
+                <code style="color: var(--primary); font-size: 13px;" id="settings-model-name">groq/llama-3.3-70b-versatile</code>
+              </div>
+
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px; background: var(--bg-input); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div>
+                  <div style="font-weight: 600; font-size: 14px;">Rate Limiter Strategy</div>
+                  <div style="font-size: 12px; color: var(--text-muted);">IP-based slowapi protection</div>
+                </div>
+                <span class="badge badge-published">20 req / min</span>
+              </div>
+
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px; background: var(--bg-input); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div>
+                  <div style="font-weight: 600; font-size: 14px;">Persistence Layer</div>
+                  <div style="font-size: 12px; color: var(--text-muted);">SQLAlchemy ORM</div>
+                </div>
+                <span class="badge badge-published">publish_jobs.db (SQLite)</span>
+              </div>
+
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px; background: var(--bg-input); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div>
+                  <div style="font-weight: 600; font-size: 14px;">Secrets & Credentials Isolation</div>
+                  <div style="font-size: 12px; color: var(--text-muted);">Environment variables (.env)</div>
+                </div>
+                <span class="badge badge-published"><i class="ri-lock-fill"></i> Secured / Hidden</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+
+  </div>
+
+  <!-- Edit Post Modal -->
+  <div class="modal-overlay" id="modal-edit-post">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title"><i class="ri-edit-line"></i> Edit Pending Post Content</h3>
+        <button class="modal-close" onclick="window.app.closeModal('modal-edit-post')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="edit-job-id">
+        <div class="form-group">
+          <label class="form-label">Post Content Text</label>
+          <textarea class="form-control" id="edit-job-content" style="min-height: 180px;"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="window.app.closeModal('modal-edit-post')">Cancel</button>
+        <button class="btn btn-success" onclick="window.approvalController.submitEdit()">Save Edits & Auto-Publish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Application Scripts -->
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/dashboard.js"></script>
+  <script src="/static/js/content.js"></script>
+  <script src="/static/js/approval.js"></script>
+  <script src="/static/js/calendar.js"></script>
+  <script src="/static/js/connections.js"></script>
+  <script src="/static/js/publishing.js"></script>
+  <script src="/static/js/analytics.js"></script>
+  <script src="/static/js/settings.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -7,3 +7,4 @@ sqlalchemy
 litellm<1.80.0
 requests
 slowapi
+tenacity

@@ -96,7 +96,9 @@ Start the FastAPI development server with reload enabled using your virtual envi
 ```bash
 .venv\Scripts\python.exe -m uvicorn app:app --reload --port 8001
 ```
-The server will start running at `http://127.0.0.1:8001`. You can access the Swagger UI documentation at `http://127.0.0.1:8001/docs`.
+The server will start running at `http://127.0.0.1:8001`. 
+- **Web Dashboard:** Access the modern SaaS frontend dashboard directly at `http://127.0.0.1:8001/` or `http://127.0.0.1:8001/dashboard`.
+- **Swagger UI API Docs:** Access interactive OpenAPI documentation at `http://127.0.0.1:8001/docs`.
 
 ---
 
